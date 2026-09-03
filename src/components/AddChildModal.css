@@ -1,0 +1,187 @@
+/* ===========================
+   AddChildModal Styles
+   Palette: #F5FBEF · #92AD94 · #748B75 · #503D42 · #84C318
+   =========================== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(80, 61, 66, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  animation: overlayFadeIn 0.3s ease;
+  backdrop-filter: blur(4px);
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-card {
+  background-color: #F5FBEF;
+  border-radius: 22px;
+  padding: 2.8rem 2.5rem 2rem;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(146, 173, 148, 0.15);
+  animation: cardSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cardSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-title {
+  font-family: 'Fraunces', 'Georgia', serif;
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: #503D42;
+  margin-bottom: 0.5rem;
+}
+
+.modal-subtitle {
+  font-size: 0.95rem;
+  color: #748B75;
+  line-height: 1.65;
+  margin-bottom: 1.8rem;
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.modal-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #748B75;
+  margin-top: 0.8rem;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 1.5px solid #92AD94;
+  border-radius: 10px;
+  font-size: 1rem;
+  color: #503D42;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.modal-input:focus {
+  border-color: #84C318;
+  box-shadow: 0 0 0 3px rgba(132, 195, 24, 0.15);
+}
+
+.modal-input::placeholder {
+  color: #92AD94;
+}
+
+/* Age input with icon */
+.modal-age-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.modal-age-icon {
+  position: absolute;
+  left: 12px;
+  font-size: 1.1rem;
+  pointer-events: none;
+}
+
+.modal-input--age {
+  padding-left: 2.5rem;
+}
+
+/* File upload area */
+.modal-upload {
+  border: 2px dashed #92AD94;
+  border-radius: 14px;
+  padding: 1.8rem 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.25s ease, background 0.25s ease;
+  margin-top: 0.3rem;
+  background: rgba(146, 173, 148, 0.06);
+}
+
+.modal-upload:hover,
+.modal-upload--active {
+  border-color: #84C318;
+  background: rgba(132, 195, 24, 0.06);
+}
+
+.modal-upload-text {
+  font-weight: 600;
+  color: #748B75;
+  font-size: 0.95rem;
+  margin-bottom: 0.35rem;
+}
+
+.modal-upload-hint {
+  font-size: 0.8rem;
+  color: #92AD94;
+}
+
+.modal-upload-filename {
+  font-weight: 600;
+  color: #84C318;
+  font-size: 0.95rem;
+  word-break: break-all;
+}
+
+/* Submit button */
+.modal-submit {
+  margin-top: 1.5rem;
+  width: 100%;
+  padding: 0.95rem 1.5rem;
+  background: linear-gradient(135deg, #748B75, #503D42);
+  color: #F5FBEF;
+  border: none;
+  border-radius: 12px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 16px rgba(80, 61, 66, 0.3);
+}
+
+.modal-submit:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(80, 61, 66, 0.4);
+}
+
+.modal-submit:active {
+  transform: translateY(0);
+}
+
+/* Responsive */
+@media (max-width: 520px) {
+  .modal-card {
+    padding: 2rem 1.5rem 1.5rem;
+  }
+
+  .modal-title {
+    font-size: 1.5rem;
+  }
+}

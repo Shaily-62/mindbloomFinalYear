@@ -1,0 +1,5 @@
+/* LandingPage.css
+   The landing page styles are defined in ../App.css.
+   This file imports them so the LandingPage component picks them up. */
+
+@import '../App.css';
