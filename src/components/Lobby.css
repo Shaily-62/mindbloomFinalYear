@@ -1,0 +1,34 @@
+/* Lock the page — no scroll, no resize loop */
+.lobby-page {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  background: #0d1f2d;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Let Phaser own the sizing — no aspect-ratio here */
+#mindbloom-lobby,
+#mindbloom-choose-character {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#mindbloom-lobby canvas,
+#mindbloom-choose-character canvas {
+  display: block !important;
+  max-width: 100vw;
+  max-height: 100vh;
+}
+
+#mindbloom-lobby canvas:nth-child(n+2),
+#mindbloom-choose-character canvas:nth-child(n+2) {
+  display: none !important;
+}

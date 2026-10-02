@@ -1,3 +1,14 @@
+/* 0. CUSTOM FONTS */
+@font-face {
+  font-family: "Isometra";
+  src: url("/game-assests/fonts/Isometra.woff2") format("woff2"),
+       url("/game-assests/fonts/Isometra.woff") format("woff"),
+       url("/game-assests/fonts/Isometra.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* 1. NUKE VITE'S DEFAULT ROOT CONSTRAINTS */
 #root {
   max-width: 100% !important;

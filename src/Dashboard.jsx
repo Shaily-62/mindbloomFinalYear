@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import AddChildModal from './components/AddChildModal.jsx';
 import './Dashboard.css';
+import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [children, setChildren] = useState([]);
   const [activeSidebarItem, setActiveSidebarItem] = useState('overview');
@@ -154,7 +156,7 @@ export default function Dashboard() {
                   )}
                   <div className="dash-child-actions">
                     <button className="dash-child-action">View Progress</button>
-                    <button className="dash-child-action dash-child-action--play">▶ Play</button>
+                    <button onClick={() => navigate('/game')}className="dash-child-action dash-child-action--play">▶ Play</button>
                   </div>
                 </div>
               ))
