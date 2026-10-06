@@ -7,6 +7,9 @@ import Dashboard from './Dashboard.jsx';
 import Game from './components/Game.jsx';
 import Lobby from './components/Lobby.jsx';
 import ChooseCharacter from './components/ChooseCharacter.jsx';
+import Map from "./components/Map.jsx";
+import Swamp from "./components/Swamp.jsx";
+import Desert from "./components/Desert.jsx";
 
 export default function App() {
   return (
@@ -24,6 +27,9 @@ export default function App() {
         <Route path="/game" element={<Game />} />
         <Route path="/lobby" element={<Lobby />} />
         <Route path="/choosecharacter" element={<ChooseCharacter />} />
+        <Route path="/map" element={<Map />} />
+        <Route path="/swamp" element={<Swamp />} />
+        <Route path="/desert" element={<Desert />} />
       </Routes>
     </Router>
   );

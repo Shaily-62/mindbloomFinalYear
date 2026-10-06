@@ -223,7 +223,7 @@ export default class LobbyScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     startButton.on("pointerdown", () => {
-      console.log("Starting game...");
+       window.location.href = "/map";
     });
 
 
