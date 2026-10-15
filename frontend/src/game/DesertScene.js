@@ -1069,9 +1069,9 @@ export default class DesertScene extends Phaser.Scene {
 
     const panelGfx = this.add.graphics();
     panelGfx.fillStyle(0x2a1a05, 0.95);
-    panelGfx.fillRoundedRect(-220, -130, 440, 260, 22);
+    panelGfx.fillRoundedRect(-220, -130, 440, 330, 22);
     panelGfx.lineStyle(3, 0xffd700, 1);
-    panelGfx.strokeRoundedRect(-220, -130, 440, 260, 22);
+    panelGfx.strokeRoundedRect(-220, -130, 440, 330, 22);
     popupContainer.add(panelGfx);
 
     const title = this.add.text(0, -95, "🏜️ Desert Complete! 🏜️", {
@@ -1097,18 +1097,82 @@ export default class DesertScene extends Phaser.Scene {
     }).setOrigin(0.5);
     popupContainer.add(nextText);
 
-    // Play Again button
-    const btnGfx = this.add.graphics();
-    btnGfx.fillStyle(0xffd700, 1);
-    btnGfx.fillRoundedRect(-70, 70, 140, 40, 10);
-    popupContainer.add(btnGfx);
+    // Auto transition countdown
+    let autoSec = 4;
+    const autoText = this.add.text(0, 72, `🌿 Next Game: Garden Memory in ${autoSec}s...`, {
+      fontFamily: FONT, fontSize: "16px", fontStyle: "bold", color: "#98fb98",
+    }).setOrigin(0.5);
+    popupContainer.add(autoText);
 
-    const btnText = this.add.text(0, 90, "Play Again!", {
-      fontFamily: FONT, fontSize: "18px", fontStyle: "bold", color: "#3a2a10",
+    const totalScore = this.carry.score + this.syllableGame.getScore();
+    const goToGarden = () => {
+      if (this._hasNavigatedGarden) return;
+      this._hasNavigatedGarden = true;
+      if (countdownTimer) countdownTimer.remove();
+      this.cameras.main.fadeOut(400);
+      this.time.delayedCall(450, () => {
+        window.location.href = `/garden?score=${totalScore}&level=1`;
+      });
+    };
+
+    const countdownTimer = this.time.addEvent({
+      delay: 1000,
+      repeat: 3,
+      callback: () => {
+        autoSec--;
+        if (autoSec <= 0) {
+          goToGarden();
+        } else if (autoText && autoText.active) {
+          autoText.setText(`🌿 Next Game: Garden Memory in ${autoSec}s...`);
+        }
+      }
+    });
+
+    // Primary: Go to Garden Now button
+    const gardenBtnGfx = this.add.graphics();
+    gardenBtnGfx.fillStyle(0x2d6a1e, 1);
+    gardenBtnGfx.fillRoundedRect(-125, 95, 250, 46, 12);
+    gardenBtnGfx.lineStyle(2, 0x7ddf64, 1);
+    gardenBtnGfx.strokeRoundedRect(-125, 95, 250, 46, 12);
+    popupContainer.add(gardenBtnGfx);
+
+    const gardenBtnText = this.add.text(0, 118, "🌿 Play Garden Memory 🌿", {
+      fontFamily: FONT, fontSize: "18px", fontStyle: "bold", color: "#ffffff",
+    }).setOrigin(0.5);
+    popupContainer.add(gardenBtnText);
+
+    const gardenHit = this.add.rectangle(0, 118, 250, 46, 0x000000, 0)
+      .setInteractive({ useHandCursor: true });
+    popupContainer.add(gardenHit);
+
+    gardenHit.on("pointerover", () => {
+      gardenBtnText.setColor("#ffd700");
+      gardenBtnGfx.clear();
+      gardenBtnGfx.fillStyle(0x3a8226, 1);
+      gardenBtnGfx.fillRoundedRect(-125, 95, 250, 46, 12);
+      gardenBtnGfx.lineStyle(2, 0xffd700, 1);
+      gardenBtnGfx.strokeRoundedRect(-125, 95, 250, 46, 12);
+    });
+    gardenHit.on("pointerout", () => {
+      gardenBtnText.setColor("#ffffff");
+      gardenBtnGfx.clear();
+      gardenBtnGfx.fillStyle(0x2d6a1e, 1);
+      gardenBtnGfx.fillRoundedRect(-125, 95, 250, 46, 12);
+      gardenBtnGfx.lineStyle(2, 0x7ddf64, 1);
+      gardenBtnGfx.strokeRoundedRect(-125, 95, 250, 46, 12);
+    });
+    gardenHit.on("pointerdown", () => goToGarden());
+
+    // Secondary: Replay Desert
+    const replayText = this.add.text(0, 165, `↺ Replay Desert (Level ${nextLevel})`, {
+      fontFamily: FONT, fontSize: "15px", color: "#f2cf85",
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    popupContainer.add(btnText);
+    popupContainer.add(replayText);
 
-    btnText.on("pointerdown", () => {
+    replayText.on("pointerover", () => replayText.setColor("#ffd700"));
+    replayText.on("pointerout", () => replayText.setColor("#f2cf85"));
+    replayText.on("pointerdown", () => {
+      if (countdownTimer) countdownTimer.remove();
       popupContainer.destroy();
       this.syllableGame.start(nextLevel);
     });
@@ -1121,6 +1185,7 @@ export default class DesertScene extends Phaser.Scene {
       ease: "Back.easeOut",
     });
   }
+
 
   // ═══════════════════════════════════════════════════════════
   // VISUAL HELPERS

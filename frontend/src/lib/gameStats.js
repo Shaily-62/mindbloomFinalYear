@@ -103,3 +103,55 @@ export async function saveDesertSession(childId, stats) {
     if (error) console.error("desert insert error:", error.message);
   }
 }
+
+/**
+ * Upsert a garden memory game session row.
+ * Keeps ONE row per child and accumulates running totals across sessions.
+ *
+ * @param {string} childId
+ * @param {{ clicks, hits, misses, score, accuracy, missrate }} stats
+ */
+export async function saveGardenSession(childId, stats) {
+  if (!childId) return;
+
+  const { data: existing } = await supabase
+    .from("garden")
+    .select("id, clicks, hits, misses, score, accuracy, missrate, days")
+    .eq("child_id", childId)
+    .maybeSingle();
+
+  if (existing) {
+    const totalSessions = (existing.days ?? 0) + 1;
+    const { error } = await supabase
+      .from("garden")
+      .update({
+        clicks:   (existing.clicks   ?? 0) + (stats.clicks   ?? 0),
+        hits:     (existing.hits     ?? 0) + (stats.hits     ?? 0),
+        misses:   (existing.misses   ?? 0) + (stats.misses   ?? 0),
+        score:    (existing.score    ?? 0) + (stats.score    ?? 0),
+        accuracy: Math.round(
+          ((existing.accuracy ?? 0) * (totalSessions - 1) + (stats.accuracy ?? 0)) / totalSessions
+        ),
+        missrate: Math.round(
+          ((existing.missrate ?? 0) * (totalSessions - 1) + (stats.missrate ?? 0)) / totalSessions
+        ),
+        days: totalSessions,
+      })
+      .eq("id", existing.id);
+
+    if (error) console.error("garden update error:", error.message);
+  } else {
+    const { error } = await supabase.from("garden").insert({
+      child_id: childId,
+      clicks:   stats.clicks   ?? 0,
+      hits:     stats.hits     ?? 0,
+      misses:   stats.misses   ?? 0,
+      score:    stats.score    ?? 0,
+      accuracy: stats.accuracy ?? 0,
+      missrate: stats.missrate ?? 0,
+      days:     1,
+    });
+
+    if (error) console.error("garden insert error:", error.message);
+  }
+}

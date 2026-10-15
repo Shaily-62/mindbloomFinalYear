@@ -10,6 +10,7 @@ import ChooseCharacter from './components/ChooseCharacter.jsx';
 import Map from "./components/Map.jsx";
 import Swamp from "./components/Swamp.jsx";
 import Desert from "./components/Desert.jsx";
+import Garden from "./components/Garden.jsx";
 import ChildProgress from "./pages/ChildProgress.jsx";
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/map" element={<Map />} />
         <Route path="/swamp" element={<Swamp />} />
         <Route path="/desert" element={<Desert />} />
+        <Route path="/garden" element={<Garden />} />
       </Routes>
     </Router>
   );
