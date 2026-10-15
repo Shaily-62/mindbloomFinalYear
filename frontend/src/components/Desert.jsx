@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import Phaser from "phaser";
 import DesertScene from "../game/DesertScene";
+import { saveDesertSession } from "../lib/gameStats";
 
 export default function Desert() {
   useEffect(() => {
@@ -8,6 +9,10 @@ export default function Desert() {
     if (container) {
       container.innerHTML = "";
     }
+
+    // Expose a global save callback so Phaser (non-React) can call it
+    const childId = localStorage.getItem("childId");
+    window.__saveDesert = (stats) => saveDesertSession(childId, stats);
 
     // Read score/level from URL query parameters if present
     const params = new URLSearchParams(window.location.search);
@@ -48,6 +53,7 @@ export default function Desert() {
     });
 
     return () => {
+      window.__saveDesert = null;
       try {
         game.destroy(true);
       } catch (e) {

@@ -1,0 +1,94 @@
+{
+  "version": 2,
+  "features": [
+    "age",
+    "game1_error_rate",
+    "game2_error_rate",
+    "game1_miss_ratio",
+    "game2_miss_ratio"
+  ],
+  "mean": [
+    9.5,
+    0.28,
+    0.30,
+    0.30,
+    0.32
+  ],
+  "scale": [
+    2.5,
+    0.18,
+    0.18,
+    0.20,
+    0.20
+  ],
+  "coef": [
+    0.30,
+    0.70,
+    0.75,
+    0.50,
+    0.55
+  ],
+  "intercept": -2.40,
+  "screen_threshold": 0.08957526146565388,
+  "high_threshold": 0.1832519278293608,
+  "age_range": [
+    5,
+    17
+  ],
+  "training_prevalence": 0.10757409440175632,
+  "labels": {
+    "age": "Age developmental baseline",
+    "game1_error_rate": "Word recognition accuracy (Swamp)",
+    "game2_error_rate": "Syllable segmentation accuracy (Desert)",
+    "game1_miss_ratio": "Letter selection consistency (Swamp)",
+    "game2_miss_ratio": "Syllable sequence consistency (Desert)"
+  },
+  "test_vectors": [
+    {
+      "input": {
+        "age": 8.0,
+        "game1": { "hits": 3.0, "clicks": 3.0, "misses": 0.0 },
+        "game2": { "hits": 6.0, "clicks": 6.0, "misses": 0.0 }
+      },
+      "expected_probability": 0.0014296586486052343,
+      "expected_band": "low"
+    },
+    {
+      "input": {
+        "age": 8.0,
+        "game1": { "hits": 3.0, "clicks": 5.0, "misses": 2.0 },
+        "game2": { "hits": 6.0, "clicks": 9.0, "misses": 3.0 }
+      },
+      "expected_probability": 0.15606830756364887,
+      "expected_band": "elevated"
+    },
+    {
+      "input": {
+        "age": 8.0,
+        "game1": { "hits": 3.0, "clicks": 7.0, "misses": 4.0 },
+        "game2": { "hits": 6.0, "clicks": 12.0, "misses": 6.0 }
+      },
+      "expected_probability": 0.63650762913541,
+      "expected_band": "high"
+    },
+    {
+      "input": {
+        "age": 10.0,
+        "game1": { "hits": 9.0, "clicks": 10.0, "misses": 1.0 },
+        "game2": { "hits": 18.0, "clicks": 20.0, "misses": 2.0 }
+      },
+      "expected_probability": 0.006838442587105933,
+      "expected_band": "low"
+    },
+    {
+      "input": {
+        "age": 11.0,
+        "game1": { "hits": 6.0, "clicks": 9.0, "misses": 3.0 },
+        "game2": { "hits": 12.0, "clicks": 17.0, "misses": 5.0 }
+      },
+      "expected_probability": 0.11660857966591982,
+      "expected_band": "elevated"
+    }
+  ],
+  "notes": "MindBloom calibrated screening model evaluating phonological word formation and syllable segmentation dynamics. Screening estimate only, not a medical diagnosis."
+}

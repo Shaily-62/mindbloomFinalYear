@@ -1,19 +1,24 @@
 import React, { useState, useRef } from 'react';
 import './AddChildModal.css';
 
+
 export default function AddChildModal({ isOpen, onRequestClose, onChildAdded }) {
   const [childName, setChildName] = useState('');
   const [childAge, setChildAge] = useState('');
   const [fileName, setFileName] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
-
+  const [handwritingFile, setHandwritingFile] = useState(null);
   if (!isOpen) return null;
 
   const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) setFileName(file.name);
-  };
+  const file = e.target.files?.[0];
+
+  if (file) {
+    setHandwritingFile(file);
+    setFileName(file.name);
+  }
+};
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -26,28 +31,38 @@ export default function AddChildModal({ isOpen, onRequestClose, onChildAdded }) 
   };
 
   const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) setFileName(file.name);
-  };
+  e.preventDefault();
+  e.stopPropagation();
+  setDragActive(false);
+
+  const file = e.dataTransfer.files?.[0];
+
+  if (file) {
+    setHandwritingFile(file);
+    setFileName(file.name);
+  }
+};
 
   const handleSubmit = (e) => {
-    e.preventDefault();
-    const newChild = {
-      id: Date.now(),
-      name: childName,
-      age: childAge,
-      fileName: fileName || null,
-    };
-    if (onChildAdded) onChildAdded(newChild);
-    // Reset form
-    setChildName('');
-    setChildAge('');
-    setFileName('');
-    onRequestClose();
+  e.preventDefault();
+
+  const newChild = {
+    name: childName,
+    age: childAge,
+    handwriting: handwritingFile,
   };
+
+  if (onChildAdded) {
+    onChildAdded(newChild);
+  }
+
+  setChildName('');
+  setChildAge('');
+  setFileName('');
+  setHandwritingFile(null);
+
+  onRequestClose();
+};
 
   return (
     <div className="modal-overlay" onClick={onRequestClose}>

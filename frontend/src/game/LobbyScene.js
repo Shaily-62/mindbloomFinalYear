@@ -7,7 +7,30 @@ export default class LobbyScene extends Phaser.Scene {
     this.selectedGender = "boy";
     this.coins = 1250;
   }
+  init(data) {
+  this.childId   = data?.child?.id ?? "guest";
+  this.childName = data?.child?.name || "Player";
+  const saved    = data?.saved || {};
+  this.selectedGender    = saved.character || "boy";
+  this.hasSavedCharacter = !!saved.character;
+  this.movesCount        = saved.moves ?? 0;
+  this.daysClaimed       = Math.min(saved.days ?? 0, 7);
+  this.saveLobby         = data?.saveLobby || (async () => {});
+  this.dialogGroup = null;
+  this.selectedCharSprite = null;
+  this.selectedCharGroup = null;
 
+  // Read unlocked moves & perks from localStorage
+  try {
+    const raw = localStorage.getItem(`mb_unlocked_${this.childId}`);
+    const unlocked = raw ? JSON.parse(raw) : { moves: [], perks: [] };
+    this.unlockedMoves = unlocked.moves || [];
+    this.unlockedPerks = unlocked.perks || [];
+  } catch (e) {
+    this.unlockedMoves = [];
+    this.unlockedPerks = [];
+  }
+}
   preload() {
 
     // Background layers
@@ -119,7 +142,11 @@ export default class LobbyScene extends Phaser.Scene {
       .setOrigin(1, 0)
       .setDepth(10);
 
-    this.add.text(width - 100, 35, "Player1", {
+    const displayName = this.childName.length > 12
+  ? this.childName.slice(0, 11) + "…"
+  : this.childName;
+
+this.add.text(width - 100, 28, displayName, {
       fontFamily: FONT,
       fontSize: "16px",
       color: "#f5fbef",
@@ -170,8 +197,8 @@ export default class LobbyScene extends Phaser.Scene {
       .setDepth(10);
 
     charIcon.on("pointerdown", () => {
-      this.showCharacterDialog();
-    });
+  this.showCharacterDialog();
+});
 
     // 2. Moves Icon
     const movesIcon = this.add.image(70, 220, "icon-moves")
@@ -356,15 +383,12 @@ export default class LobbyScene extends Phaser.Scene {
       girlSprite, girlLabel, girlHitArea
     ];
 
-    boyHitArea.on("pointerdown", () => {
-      this.destroyDialog();
-      this.showSelectedCharacter("boy");
-    });
+    boyHitArea.on("pointerdown", () => { this.destroyDialog(); this.chooseCharacter("boy"); });
 
-    girlHitArea.on("pointerdown", () => {
-      this.destroyDialog();
-      this.showSelectedCharacter("girl");
-    });
+
+    girlHitArea.on("pointerdown", () => { this.destroyDialog(); this.chooseCharacter("girl"); });
+
+    
 
     // Ensure character is displayed side-by-side on left
     if (!this.selectedCharSprite) {
@@ -372,128 +396,108 @@ export default class LobbyScene extends Phaser.Scene {
     }
   }
 
-
+  chooseCharacter(gender) {
+  this.showSelectedCharacter(gender);
+  this.saveLobby({ character: gender });
+  // Persist so SwampScene / DesertScene can read it
+  localStorage.setItem("selectedCharacter", gender);
+}
   // =========================================================
   // MOVES SECTION DIALOG (side-by-side on right)
   // =========================================================
 
   showMovesDialog() {
-
     if (this.dialogGroup) return;
-
     const { W: width, H: height, CURSIVE_FONT, FONT } = this;
 
     const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.3)
-      .setDepth(20)
-      .setInteractive();
-
-    const boxX = width * 0.70;
-    const boxY = height / 2;
-
-    // Moves Box container image (using movesbox.png)
+      .setDepth(20).setInteractive();
+    const boxX = width * 0.70, boxY = height / 2;
     const box = this.add.image(boxX, boxY, "moves-box")
-      .setDisplaySize(500, 340)
-      .setDepth(21);
-
-    // Title: Character Moves
+      .setDisplaySize(500, 340).setDepth(21);
     const title = this.add.text(boxX, boxY - 110, "Character Moves", {
-      fontFamily: CURSIVE_FONT,
-      fontSize: "34px",
-      color: "#503d42",
-      align: "center"
-    })
-      .setOrigin(0.5)
-      .setDepth(22);
+      fontFamily: CURSIVE_FONT, fontSize: "34px", color: "#503d42", align: "center",
+    }).setOrigin(0.5).setDepth(22);
 
-    const subtitle = this.add.text(boxX, boxY - 70, "Select an Attack Move to trigger:", {
-      fontFamily: FONT,
-      fontSize: "13px",
-      fontWeight: "700",
-      color: "#503d42",
-      align: "center"
-    })
-      .setOrigin(0.5)
-      .setDepth(22);
+    const subtitle = this.add.text(boxX, boxY - 70, "Earn moves from Daily Rewards:", {
+      fontFamily: FONT, fontSize: "13px", fontWeight: "700", color: "#503d42", align: "center",
+    }).setOrigin(0.5).setDepth(22);
 
-    // --- Attack 1, Attack 2, Attack 3 Buttons ---
-    const attackButtons = [];
     const attacks = [
       { id: 1, label: "⚔️ Attack 1" },
       { id: 2, label: "⚡ Attack 2" },
-      { id: 3, label: "🔥 Attack 3" }
+      { id: 3, label: "🔥 Attack 3" },
     ];
 
+    const attackButtons = [];
     attacks.forEach((atk, idx) => {
       const btnX = boxX - 120 + idx * 120;
       const btnY = boxY - 20;
+      const isUnlocked = this.unlockedMoves.includes(atk.id);
 
       const btnBg = this.add.graphics().setDepth(22);
-      const drawBtn = (isHover) => {
+      const drawBtn = (hover) => {
         btnBg.clear();
-        btnBg.fillStyle(isHover ? 0x8b5cf6 : 0x6d28d9, 0.9);
-        btnBg.fillRoundedRect(btnX - 52, btnY - 18, 104, 36, 10);
-        btnBg.lineStyle(2, 0xffffff, 0.9);
-        btnBg.strokeRoundedRect(btnX - 52, btnY - 18, 104, 36, 10);
+        if (!isUnlocked) {
+          btnBg.fillStyle(0x555555, 0.5);
+          btnBg.fillRoundedRect(btnX - 52, btnY - 18, 104, 36, 10);
+          btnBg.lineStyle(2, 0x888888, 0.6);
+          btnBg.strokeRoundedRect(btnX - 52, btnY - 18, 104, 36, 10);
+        } else {
+          btnBg.fillStyle(hover ? 0x8b5cf6 : 0x6d28d9, 0.9);
+          btnBg.fillRoundedRect(btnX - 52, btnY - 18, 104, 36, 10);
+          btnBg.lineStyle(2, 0xffffff, 0.9);
+          btnBg.strokeRoundedRect(btnX - 52, btnY - 18, 104, 36, 10);
+        }
       };
       drawBtn(false);
 
-      const btnText = this.add.text(btnX, btnY, atk.label, {
-        fontFamily: FONT,
-        fontSize: "13px",
-        fontWeight: "700",
-        color: "#ffffff"
-      })
-        .setOrigin(0.5)
-        .setDepth(23);
+      const displayLabel = isUnlocked ? atk.label : `🔒 Move ${atk.id}`;
+      const btnText = this.add.text(btnX, btnY, displayLabel, {
+        fontFamily: FONT, fontSize: "13px", fontWeight: "700",
+        color: isUnlocked ? "#ffffff" : "#999999",
+      }).setOrigin(0.5).setDepth(23);
 
       const hitArea = this.add.rectangle(btnX, btnY, 104, 36, 0x000000, 0)
-        .setDepth(24)
-        .setInteractive({ useHandCursor: true });
-
-      hitArea.on("pointerover", () => drawBtn(true));
-      hitArea.on("pointerout", () => drawBtn(false));
-      hitArea.on("pointerdown", () => {
-        this.triggerAttack(atk.id);
-      });
+        .setDepth(24);
+      if (isUnlocked) {
+        hitArea.setInteractive({ useHandCursor: true });
+        hitArea.on("pointerover", () => drawBtn(true));
+        hitArea.on("pointerout",  () => drawBtn(false));
+        hitArea.on("pointerdown", () => this.triggerAttack(atk.id));
+      }
 
       attackButtons.push(btnBg, btnText, hitArea);
     });
 
-    // Control tips below buttons
-    const tipsText = this.add.text(boxX, boxY + 40, "🏃 Walk / Run: Arrow Keys / WASD\n🛡️ Shield: Shift Key  |  ✨ Special: E", {
-      fontFamily: FONT,
-      fontSize: "12px",
-      color: "#3a2a2e",
-      align: "center"
-    })
-      .setOrigin(0.5)
-      .setDepth(22);
+    // Show active perks
+    const perkLabels = {
+      speed:  "💨 Speed Boost active!",
+      jump:   "🦘 Super Jump active!",
+      shield: "🛡️ Shield Power active!",
+    };
+    const activePerkTexts = this.unlockedPerks
+      .map(p => perkLabels[p] || "")
+      .filter(Boolean)
+      .join("  ");
 
-    // Close button
+    const tipsText = this.add.text(boxX, boxY + 40,
+      activePerkTexts || "🏃 Arrow Keys / WASD to move  |  Space Attack", {
+      fontFamily: FONT, fontSize: "12px", color: "#3a2a2e", align: "center",
+    }).setOrigin(0.5).setDepth(22);
+
     const closeBtn = this.add.text(boxX, boxY + 110, "✕ Close", {
-      fontFamily: CURSIVE_FONT,
-      fontSize: "24px",
-      color: "#503d42"
-    })
-      .setOrigin(0.5)
-      .setDepth(22)
-      .setInteractive({ useHandCursor: true });
-
-    closeBtn.on("pointerdown", () => {
-      this.destroyDialog();
-    });
-
+      fontFamily: CURSIVE_FONT, fontSize: "24px", color: "#503d42",
+    }).setOrigin(0.5).setDepth(22).setInteractive({ useHandCursor: true });
+    closeBtn.on("pointerdown", () => this.destroyDialog());
     closeBtn.on("pointerover", () => closeBtn.setColor("#8b0000"));
-    closeBtn.on("pointerout", () => closeBtn.setColor("#503d42"));
+    closeBtn.on("pointerout",  () => closeBtn.setColor("#503d42"));
 
     this.dialogGroup = [overlay, box, title, subtitle, ...attackButtons, tipsText, closeBtn];
-
-    // Ensure character is displayed side-by-side on left
-    if (!this.selectedCharSprite) {
-      this.showSelectedCharacter(this.selectedGender || "boy");
-    }
+    if (!this.selectedCharSprite) this.showSelectedCharacter(this.selectedGender || "boy");
   }
 
+  
 
   // =========================================================
   // TRIGGER ATTACK ANIMATION ON CHARACTER
@@ -501,16 +505,16 @@ export default class LobbyScene extends Phaser.Scene {
 
   triggerAttack(attackNum) {
     if (!this.selectedCharSprite) return;
+    if (!this.unlockedMoves.includes(attackNum)) return;
 
     const gender = this.selectedGender || "boy";
     const animKey = `${gender}-attack${attackNum}-anim`;
     const idleAnimKey = `${gender}-idle-anim`;
+    this.movesCount++;
+    this.saveLobby({ moves: this.movesCount });
 
-    // Stop current animation and play attack
     this.selectedCharSprite.stop();
     this.selectedCharSprite.play(animKey);
-
-    // Upon completion, return to idle
     this.selectedCharSprite.once("animationcomplete", () => {
       this.selectedCharSprite.play(idleAnimKey);
     });
@@ -521,123 +525,124 @@ export default class LobbyScene extends Phaser.Scene {
   // DAILY REWARDS DIALOG (side-by-side on right)
   // =========================================================
 
-  showRewardsDialog() {
+showRewardsDialog() {
+  if (this.dialogGroup) return;
+  const { W: width, H: height, CURSIVE_FONT, FONT } = this;
 
-    if (this.dialogGroup) return;
+  const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.3)
+    .setDepth(20).setInteractive();
+  const boxX = width * 0.70, boxY = height / 2;
+  const box = this.add.image(boxX, boxY, "dialogue-box").setDisplaySize(530, 360).setDepth(21);
+  const title = this.add.text(boxX, boxY - 120, "Daily Rewards", {
+    fontFamily: CURSIVE_FONT, fontSize: "34px", color: "#503d42", align: "center",
+  }).setOrigin(0.5).setDepth(22);
 
-    const { W: width, H: height, CURSIVE_FONT, FONT } = this;
+  // 7-day reward definitions: days 1-3 unlock moves, 4-7 unlock perks
+  const REWARDS = [
+    { day: "Day 1", emoji: "⚔️", label: "Attack 1",     type: "move",    value: 1,        desc: "Move 1 unlocked!" },
+    { day: "Day 2", emoji: "⚡", label: "Attack 2",     type: "move",    value: 2,        desc: "Move 2 unlocked!" },
+    { day: "Day 3", emoji: "🔥", label: "Attack 3",     type: "move",    value: 3,        desc: "Move 3 unlocked!" },
+    { day: "Day 4", emoji: "💨", label: "Speed Boost",  type: "perk",    value: "speed",  desc: "Run 50% faster!" },
+    { day: "Day 5", emoji: "🦘", label: "Super Jump",   type: "perk",    value: "jump",   desc: "Jump 50% higher!" },
+    { day: "Day 6", emoji: "🛡️", label: "Shield Power", type: "perk",    value: "shield", desc: "Shield unlocked!" },
+    { day: "Day 7", emoji: "👑", label: "Champion!",    type: "special", value: "all",    desc: "All power!" },
+  ];
 
-    const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.3)
-      .setDepth(20)
-      .setInteractive();
+  const next = this.daysClaimed;
+  const today = new Date().toISOString().slice(0, 10);
+  const claimKey = `mb_claim_${this.childId}`;
+  const claimedToday = localStorage.getItem(claimKey) === today;
+  const allDone = next >= REWARDS.length;
+  const canClaim = !allDone && !claimedToday;
 
-    const boxX = width * 0.70;
-    const boxY = height / 2;
+  const rewardsGroup = [];
+  REWARDS.forEach((item, idx) => {
+    const claimed = idx < next;
+    const ready   = idx === next && canClaim;
+    const cardX   = boxX - 165 + (idx % 4) * 110;
+    const cardY   = boxY - 40 + Math.floor(idx / 4) * 68;
 
-    const box = this.add.image(boxX, boxY, "dialogue-box")
-      .setDisplaySize(530, 340)
-      .setDepth(21);
+    const cardBg = this.add.graphics().setDepth(22);
+    cardBg.fillStyle(ready ? 0xfef08a : claimed ? 0xdcfce7 : 0xffffff, 0.9);
+    cardBg.fillRoundedRect(cardX - 46, cardY - 28, 92, 58, 8);
+    cardBg.lineStyle(1.5, ready ? 0xca8a04 : claimed ? 0x4ade80 : 0x94a3b8, 0.9);
+    cardBg.strokeRoundedRect(cardX - 46, cardY - 28, 92, 58, 8);
 
-    const title = this.add.text(boxX, boxY - 110, "Daily Rewards", {
-      fontFamily: CURSIVE_FONT,
-      fontSize: "34px",
-      color: "#503d42",
-      align: "center"
-    })
-      .setOrigin(0.5)
-      .setDepth(22);
-
-    // 7-Day Rewards streak grid
-    const days = [
-      { day: "Day 1", reward: "🪙 100", status: "Claimed ✓" },
-      { day: "Day 2", reward: "🪙 250", status: "READY!" },
-      { day: "Day 3", reward: "🛡️ Shield", status: "Locked" },
-      { day: "Day 4", reward: "🪙 500", status: "Locked" },
-      { day: "Day 5", reward: "⚔️ Weapon", status: "Locked" },
-      { day: "Day 6", reward: "🪙 1000", status: "Locked" },
-      { day: "Day 7", reward: "👑 Crown", status: "Locked" },
-    ];
-
-    const rewardsGroup = [];
-    days.forEach((item, idx) => {
-      const col = idx % 4;
-      const row = Math.floor(idx / 4);
-      const cardX = boxX - 165 + col * 110;
-      const cardY = boxY - 35 + row * 60;
-
-      const cardBg = this.add.graphics().setDepth(22);
-      cardBg.fillStyle(item.status === "READY!" ? 0xfef08a : 0xffffff, 0.9);
-      cardBg.fillRoundedRect(cardX - 46, cardY - 22, 92, 50, 8);
-      cardBg.lineStyle(1.5, item.status === "READY!" ? 0xca8a04 : 0x94a3b8, 0.8);
-      cardBg.strokeRoundedRect(cardX - 46, cardY - 22, 92, 50, 8);
-
-      const dayText = this.add.text(cardX, cardY - 12, item.day, {
-        fontFamily: FONT,
-        fontSize: "11px",
-        fontWeight: "700",
-        color: "#503d42"
-      }).setOrigin(0.5).setDepth(23);
-
-      const rewardText = this.add.text(cardX, cardY + 5, item.reward, {
-        fontFamily: FONT,
-        fontSize: "13px",
-        fontWeight: "700",
-        color: "#166534"
-      }).setOrigin(0.5).setDepth(23);
-
-      rewardsGroup.push(cardBg, dayText, rewardText);
-    });
-
-    // Claim Button
-    const claimBtnBg = this.add.graphics().setDepth(22);
-    claimBtnBg.fillStyle(0x15803d, 0.95);
-    claimBtnBg.fillRoundedRect(boxX - 85, boxY + 75, 170, 38, 10);
-    claimBtnBg.lineStyle(2, 0x86efac, 0.9);
-    claimBtnBg.strokeRoundedRect(boxX - 85, boxY + 75, 170, 38, 10);
-
-    const claimText = this.add.text(boxX, boxY + 94, "Claim 250 Coins! 🎉", {
-      fontFamily: FONT,
-      fontSize: "14px",
-      fontWeight: "700",
-      color: "#ffffff"
+    const dayLabel = item.day + (claimed ? " ✓" : "");
+    const dayText = this.add.text(cardX, cardY - 16, dayLabel, {
+      fontFamily: FONT, fontSize: "10px", fontWeight: "700", color: "#503d42",
     }).setOrigin(0.5).setDepth(23);
+    const emojiText = this.add.text(cardX, cardY + 0, item.emoji, {
+      fontFamily: FONT, fontSize: "18px",
+    }).setOrigin(0.5).setDepth(23);
+    const moveText = this.add.text(cardX, cardY + 18, item.label, {
+      fontFamily: FONT, fontSize: "9px", fontWeight: "700", color: "#166534",
+    }).setOrigin(0.5).setDepth(23);
+    rewardsGroup.push(cardBg, dayText, emojiText, moveText);
+  });
 
-    const claimHit = this.add.rectangle(boxX, boxY + 94, 170, 38, 0x000000, 0)
-      .setDepth(24)
-      .setInteractive({ useHandCursor: true });
+  const cur = REWARDS[Math.min(next, REWARDS.length - 1)];
+  const claimLabel = allDone
+    ? "All rewards claimed! 🏆"
+    : claimedToday
+    ? "Come back tomorrow ⏰"
+    : `Claim: ${cur.emoji} ${cur.label}!`;
 
+  const claimBtnBg = this.add.graphics().setDepth(22);
+  claimBtnBg.fillStyle(canClaim ? 0x15803d : 0x6b7280, 0.95);
+  claimBtnBg.fillRoundedRect(boxX - 95, boxY + 90, 190, 38, 10);
+  claimBtnBg.lineStyle(2, 0x86efac, 0.9);
+  claimBtnBg.strokeRoundedRect(boxX - 95, boxY + 90, 190, 38, 10);
+
+  const claimText = this.add.text(boxX, boxY + 109, claimLabel, {
+    fontFamily: FONT, fontSize: "13px", fontWeight: "700", color: "#ffffff",
+  }).setOrigin(0.5).setDepth(23);
+
+  const claimHit = this.add.rectangle(boxX, boxY + 109, 190, 38, 0x000000, 0).setDepth(24);
+  if (canClaim) {
+    claimHit.setInteractive({ useHandCursor: true });
     claimHit.on("pointerdown", () => {
-      this.coins += 250;
-      if (this.coinsText) {
-        this.coinsText.setText(this.coins.toLocaleString());
+      this.daysClaimed += 1;
+      localStorage.setItem(claimKey, today);
+
+      // Apply the reward
+      try {
+        const rawKey = `mb_unlocked_${this.childId}`;
+        const raw = localStorage.getItem(rawKey);
+        const unlocked = raw ? JSON.parse(raw) : { moves: [], perks: [] };
+
+        if (cur.type === "move") {
+          if (!unlocked.moves.includes(cur.value)) unlocked.moves.push(cur.value);
+          this.unlockedMoves = [...unlocked.moves];
+        } else if (cur.type === "perk") {
+          if (!unlocked.perks.includes(cur.value)) unlocked.perks.push(cur.value);
+          this.unlockedPerks = [...unlocked.perks];
+        } else if (cur.type === "special") {
+          // Day 7: give everything
+          unlocked.moves = [1, 2, 3];
+          unlocked.perks = ["speed", "jump", "shield"];
+          this.unlockedMoves = [1, 2, 3];
+          this.unlockedPerks = ["speed", "jump", "shield"];
+        }
+        localStorage.setItem(rawKey, JSON.stringify(unlocked));
+      } catch (e) {
+        console.error("unlock save error:", e);
       }
-      claimText.setText("Claimed! ✓");
-      claimHit.disableInteractive();
-    });
 
-    // Close button
-    const closeBtn = this.add.text(boxX + 210, boxY - 130, "✕", {
-      fontFamily: FONT,
-      fontSize: "20px",
-      fontWeight: "700",
-      color: "#503d42"
-    })
-      .setOrigin(0.5)
-      .setDepth(23)
-      .setInteractive({ useHandCursor: true });
-
-    closeBtn.on("pointerdown", () => {
+      this.saveLobby({ days: this.daysClaimed });
       this.destroyDialog();
+      this.showRewardsDialog();
     });
-
-    this.dialogGroup = [overlay, box, title, ...rewardsGroup, claimBtnBg, claimText, claimHit, closeBtn];
-
-    // Ensure character is displayed side-by-side on left
-    if (!this.selectedCharSprite) {
-      this.showSelectedCharacter(this.selectedGender || "boy");
-    }
   }
 
+  const closeBtn = this.add.text(boxX + 210, boxY - 145, "✕", {
+    fontFamily: FONT, fontSize: "20px", fontWeight: "700", color: "#503d42",
+  }).setOrigin(0.5).setDepth(23).setInteractive({ useHandCursor: true });
+  closeBtn.on("pointerdown", () => this.destroyDialog());
+
+  this.dialogGroup = [overlay, box, title, ...rewardsGroup, claimBtnBg, claimText, claimHit, closeBtn];
+  if (!this.selectedCharSprite) this.showSelectedCharacter(this.selectedGender || "boy");
+}
 
   destroyDialog() {
     if (this.dialogGroup) {

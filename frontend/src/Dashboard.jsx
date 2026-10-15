@@ -6,6 +6,8 @@ import AddChildModal from "./components/AddChildModal.jsx";
 import { supabase } from "./lib/supabase";
 import { getChildren, addChild, deleteChild } from "./lib/children";
 import "./Dashboard.css";
+import ScreeningResult from "./components/ScreeningResult.jsx";
+import PracticeScreeningInsight from "./components/PracticeScreeningInsight.jsx";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -14,7 +16,7 @@ export default function Dashboard() {
   const [loadingChildren, setLoadingChildren] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
   const [activeSidebarItem, setActiveSidebarItem] = useState("overview");
-
+  const [screeningChild, setScreeningChild] = useState(null);
   const openModal = () => setIsModalOpen(true);
   const closeModal = () => setIsModalOpen(false);
 
@@ -32,6 +34,7 @@ export default function Dashboard() {
       setUserProfile(data.session.user);
 
       const records = await getChildren();
+      console.log(JSON.stringify(records[0], null, 2));
       setChildren(records);
     } catch (error) {
       console.error("Error loading dashboard data:", error);
@@ -189,7 +192,12 @@ export default function Dashboard() {
         <section className="dash-analytics">
           <h2 className="dash-section-title">Analytics & Insights</h2>
           <div className="dash-analytics-grid">
-            <button className="dash-analytics-btn dash-analytics-btn--progress">
+            <button
+              className="dash-analytics-btn dash-analytics-btn--progress"
+              onClick={() => {
+                if (children.length > 0) navigate(`/child-progress/${children[0].id}`);
+              }}
+            >
               <div className="dash-analytics-btn-content">
                 <span className="dash-analytics-btn-title">
                   Progress Report
@@ -201,19 +209,12 @@ export default function Dashboard() {
               <span className="dash-analytics-btn-arrow">→</span>
             </button>
 
-            <button className="dash-analytics-btn dash-analytics-btn--reading">
-              <div className="dash-analytics-btn-content">
-                <span className="dash-analytics-btn-title">
-                  Reading Analysis
-                </span>
-                <span className="dash-analytics-btn-desc">
-                  Phonics & comprehension stats
-                </span>
-              </div>
-              <span className="dash-analytics-btn-arrow">→</span>
-            </button>
-
-            <button className="dash-analytics-btn dash-analytics-btn--screening">
+            <button
+              className="dash-analytics-btn dash-analytics-btn--screening"
+              onClick={() => {
+                if (children.length > 0) navigate(`/child-progress/${children[0].id}`);
+              }}
+            >
               <div className="dash-analytics-btn-content">
                 <span className="dash-analytics-btn-title">
                   Screening Results
@@ -268,12 +269,24 @@ export default function Dashboard() {
                     {child.fileName && (
                       <p className="dash-child-file">📄 {child.fileName}</p>
                     )}
+                    <PracticeScreeningInsight child={child} />
                     <div className="dash-child-actions">
-                      <button className="dash-child-action">
-                        View Progress
-                      </button>
                       <button
-                        onClick={() => navigate("/game")}
+                        className="dash-child-action"
+                        onClick={() => navigate(`/child-progress/${child.id}`)}
+                      >
+                        📊 View Progress
+                      </button>
+                      {child.handwriting && (
+  <button className="dash-child-action" onClick={() => setScreeningChild(child)}>
+    🔍 Screen Handwriting
+  </button>
+)}
+                      <button
+                        onClick={() => {
+                          localStorage.setItem("childId", child.id);
+                          navigate("/game");
+                        }}
                         className="dash-child-action dash-child-action--play"
                       >
                         ▶ Play
@@ -292,6 +305,9 @@ export default function Dashboard() {
           )}
         </section>
       </main>
+      {screeningChild && (
+  <ScreeningResult child={screeningChild} onClose={() => setScreeningChild(null)} />
+)}
 
       <AddChildModal
         isOpen={isModalOpen}

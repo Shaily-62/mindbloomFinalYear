@@ -2,12 +2,18 @@ import React, { useEffect } from "react";
 import Phaser from "phaser";
 import SwampScene from "../game/SwampScene";
 import DesertScene from "../game/DesertScene";
+import { saveSwampSession } from "../lib/gameStats";
+
 export default function Swamp() {
   useEffect(() => {
     const container = document.getElementById("mindbloom-swamp");
     if (container) {
       container.innerHTML = "";
     }
+
+    // Expose a global save callback so Phaser (non-React) can call it
+    const childId = localStorage.getItem("childId");
+    window.__saveSwamp = (stats) => saveSwampSession(childId, stats);
 
     const config = {
       type: Phaser.AUTO,
@@ -21,7 +27,6 @@ export default function Swamp() {
         default: "arcade",
         arcade: {
           gravity: { y: 300 },
-          // debug: true, // uncomment to see physics bodies
         },
       },
       scale: {
@@ -30,12 +35,13 @@ export default function Swamp() {
         width: 1280,
         height: 720,
       },
-      scene: [SwampScene,DesertScene],
+      scene: [SwampScene, DesertScene],
     };
 
     const game = new Phaser.Game(config);
 
     return () => {
+      window.__saveSwamp = null;
       try {
         game.destroy(true);
       } catch (e) {

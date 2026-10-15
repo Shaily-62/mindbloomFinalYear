@@ -29,7 +29,7 @@ export default class DesertScene extends Phaser.Scene {
     this._attackTimer  = 0;
   }
 
-  // ── Receives data from SwampScene: { score, level, from } ──
+  // ── Receives data from SwampScene: { score, level, from } and reads character/perks ──
   init(data) {
     const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const urlScore = params ? parseInt(params.get("score") || "0", 10) : 0;
@@ -40,6 +40,17 @@ export default class DesertScene extends Phaser.Scene {
       level: data?.level ?? urlLevel ?? 1,
       from:  data?.from  ?? "swamp",
     };
+
+    // Character + perks (set here so preload can use them)
+    this._char = localStorage.getItem("selectedCharacter") || "boy";
+    const childId = localStorage.getItem("childId");
+    try {
+      const raw = childId ? localStorage.getItem(`mb_unlocked_${childId}`) : null;
+      const unlocked = raw ? JSON.parse(raw) : { moves: [], perks: [] };
+      this._unlockedPerks = unlocked.perks || [];
+    } catch (e) {
+      this._unlockedPerks = [];
+    }
   }
 
   preload() {
@@ -50,19 +61,21 @@ export default class DesertScene extends Phaser.Scene {
       if (!this.textures.exists(key)) this.load.image(key, path);
     });
 
-    // Player sprite sheets
-    const P = "/game-assests/character/boy";
+    // Player sprite sheets — both boy and girl
+    const P = "/game-assests/character";
     const sheets = [
-      ["player-boy-idle",   "Idle.png"],
-      ["player-boy-walk",   "Walk.png"],
-      ["player-boy-run",    "Run.png"],
-      ["player-boy-jump",   "Jump.png"],
-      ["player-boy-attack", "Attack_1.png"],
+      ["idle",   "Idle.png"],
+      ["walk",   "Walk.png"],
+      ["run",    "Run.png"],
+      ["jump",   "Jump.png"],
+      ["attack", "Attack_1.png"],
     ];
-    sheets.forEach(([key, file]) => {
-      if (!this.textures.exists(key)) {
-        this.load.spritesheet(key, `${P}/${file}`, { frameWidth: 128, frameHeight: 128 });
-      }
+    ["boy", "girl"].forEach(char => {
+      sheets.forEach(([anim, file]) => {
+        const key = `player-${char}-${anim}`;
+        if (!this.textures.exists(key))
+          this.load.spritesheet(key, `${P}/${char}/${file}`, { frameWidth: 128, frameHeight: 128 });
+      });
     });
 
     // Vulture sprite sheets (48x48 per frame)
@@ -95,23 +108,30 @@ export default class DesertScene extends Phaser.Scene {
     this._hudElements = [];
     this._gameActive = false;
 
+    // Convenience animation keys for the selected character
+    this._animIdle   = `${this._char}-idle`;
+    this._animWalk   = `${this._char}-walk`;
+    this._animRun    = `${this._char}-run`;
+    this._animJump   = `${this._char}-jump`;
+    this._animAttack = `${this._char}-attack`;
+
     this._ensureAnimations();
 
-    // ── World / camera ───────────────────────────────────────
+    // ── World / camera ─────────────────────────────────────
     this.physics.world.setBounds(0, 0, worldW, H);
     this.cameras.main.setBounds(0, 0, worldW, H);
     this.cameras.main.fadeIn(600);
 
-    // ── Parallax backgrounds ─────────────────────────────────
+    // ── Parallax backgrounds ───────────────────────────────
     this._createParallax(worldW, H);
 
-    // ── Invisible ground ─────────────────────────────────────
+    // ── Invisible ground ───────────────────────────────────
     const ground = this.add.rectangle(worldW / 2, groundY + 20, worldW, 40, 0x000000, 0);
     this.physics.add.existing(ground, true);
     this._ground = ground;
 
-    // ── Player ───────────────────────────────────────────────
-    this.player = this.physics.add.sprite(200, groundY - 4, "player-boy-idle", 0)
+    // ── Player ─────────────────────────────────────────────
+    this.player = this.physics.add.sprite(200, groundY - 4, `player-${this._char}-idle`, 0)
       .setOrigin(0.5, 1)
       .setScale(0.8)
       .setDepth(20);
@@ -121,19 +141,19 @@ export default class DesertScene extends Phaser.Scene {
     this.player.body.setGravityY(1000);
     this.player.body.setMaxVelocityY(800);
     this.player.body.setCollideWorldBounds(true);
-    this.player.play("boy-idle");
+    this.player.play(this._animIdle);
 
     this.physics.add.collider(this.player, ground);
 
-    // ── Camera follow ────────────────────────────────────────
+    // ── Camera follow ─────────────────────────────────────
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
 
-    // ── Input ────────────────────────────────────────────────
+    // ── Input ─────────────────────────────────────────────
     this.cursors    = this.input.keyboard.createCursorKeys();
     this._keyShift  = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
     this._keySpace  = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-    // ── Desert atmosphere: floating sand particles ───────────
+    // ── Desert atmosphere: floating sand particles ────────────────
     this._createDesertAtmosphere(worldW, H, groundY);
 
     // ── HUD ──────────────────────────────────────────────────
@@ -228,27 +248,29 @@ export default class DesertScene extends Phaser.Scene {
   // ═══════════════════════════════════════════════════════════
 
   _ensureAnimations() {
-    // Player animations
-    const defs = [
-      { key: "boy-idle",   texture: "player-boy-idle",   end: 5, rate: 8,  repeat: -1 },
-      { key: "boy-walk",   texture: "player-boy-walk",   end: 7, rate: 10, repeat: -1 },
-      { key: "boy-run",    texture: "player-boy-run",    end: 7, rate: 14, repeat: -1 },
-      { key: "boy-jump",   texture: "player-boy-jump",   end: 5, rate: 10, repeat: 0  },
-      { key: "boy-attack", texture: "player-boy-attack", end: 3, rate: 12, repeat: 0  },
-    ];
-    defs.forEach(({ key, texture, end, rate, repeat }) => {
-      try {
-        if (!this.anims.exists(key) && this.textures.exists(texture)) {
-          this.anims.create({
-            key,
-            frames: this.anims.generateFrameNumbers(texture, { start: 0, end }),
-            frameRate: rate,
-            repeat,
-          });
+    // Player animations for both boy and girl (safe: checks texture exists first)
+    ["boy", "girl"].forEach(char => {
+      const defs = [
+        { key: `${char}-idle`,   texture: `player-${char}-idle`,   end: 5, rate: 8,  repeat: -1 },
+        { key: `${char}-walk`,   texture: `player-${char}-walk`,   end: 7, rate: 10, repeat: -1 },
+        { key: `${char}-run`,    texture: `player-${char}-run`,    end: 7, rate: 14, repeat: -1 },
+        { key: `${char}-jump`,   texture: `player-${char}-jump`,   end: 5, rate: 10, repeat: 0  },
+        { key: `${char}-attack`, texture: `player-${char}-attack`, end: 3, rate: 12, repeat: 0  },
+      ];
+      defs.forEach(({ key, texture, end, rate, repeat }) => {
+        try {
+          if (!this.anims.exists(key) && this.textures.exists(texture)) {
+            this.anims.create({
+              key,
+              frames: this.anims.generateFrameNumbers(texture, { start: 0, end }),
+              frameRate: rate,
+              repeat,
+            });
+          }
+        } catch (e) {
+          // ignore missing textures
         }
-      } catch (e) {
-        // ignore
-      }
+      });
     });
 
     // Vulture animations
@@ -1148,7 +1170,13 @@ export default class DesertScene extends Phaser.Scene {
     if (!this.player) return;
     const dt = Math.min(delta, 50) / 1000;
 
-    const WALK = 160, RUN_MULT = 1.5, JUMP_VEL = -700;
+    // Apply perks to movement stats
+    const hasSpeed = this._unlockedPerks?.includes("speed");
+    const hasJump  = this._unlockedPerks?.includes("jump");
+    const WALK     = hasSpeed ? 240 : 160;
+    const RUN_MULT = 1.5;
+    const JUMP_VEL = hasJump  ? -1050 : -700;
+
     const body = this.player.body;
     const onGround = body.blocked.down;
     const shift = this._keyShift.isDown;
@@ -1167,10 +1195,10 @@ export default class DesertScene extends Phaser.Scene {
       body.setVelocityY(JUMP_VEL);
     }
 
-    // Animation
-    let anim = "boy-idle";
-    if (!onGround) anim = "boy-jump";
-    else if (Math.abs(vx) > 1) anim = shift ? "boy-run" : "boy-walk";
+    // Animation (use character-specific animation keys)
+    let anim = this._animIdle;
+    if (!onGround) anim = this._animJump;
+    else if (Math.abs(vx) > 1) anim = shift ? this._animRun : this._animWalk;
     if (this.player.anims.currentAnim?.key !== anim) this.player.play(anim, true);
 
     // Check syllable collisions

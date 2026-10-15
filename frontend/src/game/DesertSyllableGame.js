@@ -225,25 +225,24 @@ export class DesertSyllableGame {
     const n = R.length || 1;
     const acc = R.filter((x) => x.firstTry).length / n;
 
-    // Send analytics
+    // Compute stats for the desert table
+    const totalAttempts = this.log.length;
+    const totalCorrect  = this.log.filter((x) => x.correct).length;
+    const totalWrong    = totalAttempts - totalCorrect;
+    const accuracyPct   = Math.round((R.filter((x) => x.firstTry).length / n) * 100);
+    const missratePct   = totalAttempts ? Math.round((totalWrong / totalAttempts) * 100) : 0;
+
     try {
-      navigator.sendBeacon?.(
-        "/api/mindbloom/syllable-game",
-        new Blob(
-          [
-            JSON.stringify({
-              level: this.level,
-              accuracy: acc,
-              medianMs: median(R.map((x) => x.responseMs).filter(Boolean)),
-              rounds: R,
-              attempts: this.log,
-            }),
-          ],
-          { type: "application/json" }
-        )
-      );
+      window.__saveDesert?.({
+        clicks:   totalAttempts,
+        hits:     totalCorrect,
+        misses:   totalWrong,
+        score:    this.score,
+        accuracy: accuracyPct,
+        missrate: missratePct,
+      });
     } catch (e) {
-      // silent
+      console.error("saveDesert error:", e);
     }
 
     // Adaptive difficulty
@@ -256,6 +255,7 @@ export class DesertSyllableGame {
 
     this.scene._showLevelComplete(acc, next);
   }
+
 
   getScore() {
     return this.score;

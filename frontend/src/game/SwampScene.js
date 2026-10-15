@@ -60,21 +60,47 @@ export default class SwampScene extends Phaser.Scene {
     // Goblins
     this.goblins = [];    // array of goblin sprites
     this._goblinKills = 0;
+
+    // Character & perks (set in init)
+    this._char = "boy";
+    this._unlockedPerks = [];
+  }
+
+  init() {
+    this._char = localStorage.getItem("selectedCharacter") || "boy";
+    const childId = localStorage.getItem("childId");
+    try {
+      const raw = childId ? localStorage.getItem(`mb_unlocked_${childId}`) : null;
+      const unlocked = raw ? JSON.parse(raw) : { moves: [], perks: [] };
+      this._unlockedPerks = unlocked.perks || [];
+    } catch (e) {
+      this._unlockedPerks = [];
+    }
   }
 
   preload() {
     // 1. Tileset and Tilemap
     this.load.image("swamp-tileset", "/game-assests/swamp/1 Tiles/Tileset.png");
     this.load.tilemapTiledJSON("swamp-level1", "/game-assests/swamp/swamp-level1.json");
-    // Player spritesheets
-    this.load.spritesheet("player-boy-idle", "/game-assests/character/boy/Idle.png", { frameWidth: 128, frameHeight: 128 });
-    this.load.spritesheet("player-boy-walk", "/game-assests/character/boy/Walk.png", { frameWidth: 128, frameHeight: 128 });
-    this.load.spritesheet("player-boy-run", "/game-assests/character/boy/Run.png", { frameWidth: 128, frameHeight: 128 });
-    this.load.spritesheet("player-boy-jump", "/game-assests/character/boy/Jump.png", { frameWidth: 128, frameHeight: 128 });
-    this.load.spritesheet("player-boy-attack", "/game-assests/character/boy/Attack_1.png", { frameWidth: 128, frameHeight: 128 });
-    this.load.spritesheet("player-boy-crouch", "/game-assests/character/boy/Shield.png", { frameWidth: 128, frameHeight: 128 });
-    // Kept as alias for legacy reference
-    this.load.spritesheet("player-boy", "/game-assests/character/boy/Idle.png", { frameWidth: 128, frameHeight: 128 });
+    // Player spritesheets — load both boy and girl so the selected character works
+    const charSheets = [
+      ["idle",   "Idle.png"],
+      ["walk",   "Walk.png"],
+      ["run",    "Run.png"],
+      ["jump",   "Jump.png"],
+      ["attack", "Attack_1.png"],
+      ["crouch", "Shield.png"],
+    ];
+    ["boy", "girl"].forEach(char => {
+      charSheets.forEach(([anim, file]) => {
+        const key = `player-${char}-${anim}`;
+        if (!this.textures.exists(key))
+          this.load.spritesheet(key, `/game-assests/character/${char}/${file}`, { frameWidth: 128, frameHeight: 128 });
+      });
+      // Legacy alias
+      if (!this.textures.exists(`player-${char}`))
+        this.load.spritesheet(`player-${char}`, `/game-assests/character/${char}/Idle.png`, { frameWidth: 128, frameHeight: 128 });
+    });
 
     // Goblin spritesheets (480x480 per frame)
     const GOBLIN = "/game-assests/swamp/Male Goblin/PNG/Spritesheets";
@@ -236,8 +262,16 @@ export default class SwampScene extends Phaser.Scene {
     this._spawnX = spawnX;
     this._spawnY = spawnY;
 
+    // Convenience animation key shortcuts for this character
+    this._animIdle   = `${this._char}-idle`;
+    this._animWalk   = `${this._char}-walk`;
+    this._animRun    = `${this._char}-run`;
+    this._animJump   = `${this._char}-jump`;
+    this._animAttack = `${this._char}-attack`;
+    this._animCrouch = `${this._char}-crouch`;
+
     // Create player as an Arcade Physics sprite
-    this.player = this.physics.add.sprite(spawnX, spawnY, "player-boy-idle", 0)
+    this.player = this.physics.add.sprite(spawnX, spawnY, `player-${this._char}-idle`, 0)
       .setOrigin(0.5, 1)
       .setScale(0.8)
       .setDepth(20);
@@ -250,7 +284,7 @@ export default class SwampScene extends Phaser.Scene {
     this.player.body.setMaxVelocityY(800);
     this.player.body.setCollideWorldBounds(true);
 
-    this.player.play("boy-idle");
+    this.player.play(this._animIdle);
 
     // Tilemap collision — Ground layer only
     this.physics.add.collider(this.player, groundLayer);
@@ -330,25 +364,26 @@ export default class SwampScene extends Phaser.Scene {
       });
     }
 
-    // ── Player animations ──────────────────────────────────────
-    const boyAnims = [
-      { key: "boy-idle", texture: "player-boy-idle", start: 0, end: 5, rate: 8, repeat: -1 },
-      { key: "boy-walk", texture: "player-boy-walk", start: 0, end: 7, rate: 10, repeat: -1 },
-      { key: "boy-run", texture: "player-boy-run", start: 0, end: 7, rate: 14, repeat: -1 },
-      { key: "boy-jump", texture: "player-boy-jump", start: 0, end: 5, rate: 10, repeat: 0 },
-      { key: "boy-attack", texture: "player-boy-attack", start: 0, end: 3, rate: 12, repeat: 0 },
-      { key: "boy-crouch", texture: "player-boy-crouch", start: 0, end: 0, rate: 4, repeat: -1 },
-    ];
-
-    boyAnims.forEach(({ key, texture, start, end, rate, repeat }) => {
-      if (!this.anims.exists(key)) {
-        this.anims.create({
-          key,
-          frames: this.anims.generateFrameNumbers(texture, { start, end }),
-          frameRate: rate,
-          repeat,
-        });
-      }
+    // ── Player animations for both boy and girl ────────────────
+    ["boy", "girl"].forEach(char => {
+      const anims = [
+        { key: `${char}-idle`,   texture: `player-${char}-idle`,   start: 0, end: 5, rate: 8,  repeat: -1 },
+        { key: `${char}-walk`,   texture: `player-${char}-walk`,   start: 0, end: 7, rate: 10, repeat: -1 },
+        { key: `${char}-run`,    texture: `player-${char}-run`,    start: 0, end: 7, rate: 14, repeat: -1 },
+        { key: `${char}-jump`,   texture: `player-${char}-jump`,   start: 0, end: 5, rate: 10, repeat: 0 },
+        { key: `${char}-attack`, texture: `player-${char}-attack`, start: 0, end: 3, rate: 12, repeat: 0 },
+        { key: `${char}-crouch`, texture: `player-${char}-crouch`, start: 0, end: 0, rate: 4,  repeat: -1 },
+      ];
+      anims.forEach(({ key, texture, start, end, rate, repeat }) => {
+        if (!this.anims.exists(key) && this.textures.exists(texture)) {
+          this.anims.create({
+            key,
+            frames: this.anims.generateFrameNumbers(texture, { start, end }),
+            frameRate: rate,
+            repeat,
+          });
+        }
+      });
     });
 
     // ── Goblin animations ─────────────────────────────────────
@@ -1215,16 +1250,21 @@ export default class SwampScene extends Phaser.Scene {
       this._isAttacking = true;
       this._attackTimer = ATTACK_DURATION;
       this._attackId++;
-      this.player.play("boy-attack", true);
+      this.player.play(this._animAttack, true);
     }
     if (this._isAttacking) {
       this._attackTimer -= dt;
       if (this._attackTimer <= 0) this._isAttacking = false;
     }
 
-    // ── Horizontal velocity ────────────────────────────────────
+    // ── Horizontal velocity (speed perk: +50%) ─────────────────
+    const hasSpeed  = this._unlockedPerks.includes("speed");
+    const hasJump   = this._unlockedPerks.includes("jump");
+    const effectiveWalk = hasSpeed ? Math.round(WALK_SPEED * 1.5) : WALK_SPEED;
+    const effectiveJump = hasJump  ? Math.round(JUMP_VEL  * 1.5) : JUMP_VEL;
+
     const knockedBack = this._knockbackTimer > 0;
-    const maxSpeed = WALK_SPEED * (shift ? RUN_MULT : 1);
+    const maxSpeed = effectiveWalk * (shift ? RUN_MULT : 1);
     let vx = 0;
     if (!this._isAttacking) {
       if (left) vx = -maxSpeed;
@@ -1240,7 +1280,7 @@ export default class SwampScene extends Phaser.Scene {
 
     // ── Jump ───────────────────────────────────────────────────
     if (up && onGround && !this._isAttacking && !knockedBack) {
-      body.setVelocityY(JUMP_VEL);
+      body.setVelocityY(effectiveJump);
     }
 
     // ── Crouch ─────────────────────────────────────────────────
@@ -1249,19 +1289,19 @@ export default class SwampScene extends Phaser.Scene {
     // ── Animation state machine ────────────────────────────────
     if (!this._isAttacking) {
       if (!onGround) {
-        if (this.player.anims.currentAnim?.key !== "boy-jump") {
-          this.player.play("boy-jump", true);
+        if (this.player.anims.currentAnim?.key !== this._animJump) {
+          this.player.play(this._animJump, true);
         }
       } else if (this._isCrouching) {
-        this.player.play("boy-crouch", true);
+        this.player.play(this._animCrouch, true);
       } else if (Math.abs(vx) > 1) {
-        const movAnim = (shift && Math.abs(vx) > WALK_SPEED * 0.9) ? "boy-run" : "boy-walk";
+        const movAnim = (shift && Math.abs(vx) > effectiveWalk * 0.9) ? this._animRun : this._animWalk;
         if (this.player.anims.currentAnim?.key !== movAnim) {
           this.player.play(movAnim, true);
         }
       } else {
-        if (this.player.anims.currentAnim?.key !== "boy-idle") {
-          this.player.play("boy-idle", true);
+        if (this.player.anims.currentAnim?.key !== this._animIdle) {
+          this.player.play(this._animIdle, true);
         }
       }
     }
@@ -1326,7 +1366,7 @@ export default class SwampScene extends Phaser.Scene {
       this.player.body.setGravityY(1000);
     }
 
-    this.player.play("boy-idle", true);
+    this.player.play(this._animIdle, true);
 
     // Re-attach camera follow in case it was detached
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);

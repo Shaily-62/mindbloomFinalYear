@@ -10,6 +10,7 @@ import ChooseCharacter from './components/ChooseCharacter.jsx';
 import Map from "./components/Map.jsx";
 import Swamp from "./components/Swamp.jsx";
 import Desert from "./components/Desert.jsx";
+import ChildProgress from "./pages/ChildProgress.jsx";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/child-progress/:childId" element={<ChildProgress />} />
         <Route path="/game" element={<Game />} />
         <Route path="/lobby" element={<Lobby />} />
         <Route path="/choosecharacter" element={<ChooseCharacter />} />

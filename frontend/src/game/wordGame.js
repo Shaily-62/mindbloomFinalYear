@@ -159,10 +159,27 @@ s.time.delayedCall(2200, () => {
 _flush() {
   const R = this.rounds, n = R.length || 1;
   const acc = R.filter(x => x.firstTry).length / n;
-  navigator.sendBeacon?.("/api/mindbloom/word-game",
-    new Blob([JSON.stringify({ level: this.level, accuracy: acc,
-      medianMs: median(R.map(x => x.responseMs).filter(Boolean)),
-      rounds: R, attempts: this.log })], { type: "application/json" }));
+
+  // Build stats for the swamp table
+  const totalAttempts = this.log.length;
+  const totalCorrect  = this.log.filter(x => x.correct).length;
+  const totalWrong    = totalAttempts - totalCorrect;
+  const accuracyPct   = n ? Math.round((R.filter(x => x.firstTry).length / n) * 100) : 0;
+  const missratePct   = totalAttempts ? Math.round((totalWrong / totalAttempts) * 100) : 0;
+
+  try {
+    window.__saveSwamp?.({
+      clicks:   totalAttempts,
+      hits:     totalCorrect,
+      misses:   totalWrong,
+      score:    this.score,
+      accuracy: accuracyPct,
+      missrate: missratePct,
+    });
+  } catch (e) {
+    console.error("saveSwamp error:", e);
+  }
+
   return acc;
 }
 
@@ -179,13 +196,10 @@ _goToDesert() {
   });
 }
   _levelDone(){
-    const R=this.rounds, n=R.length, acc=R.filter(x=>x.firstTry).length/n;
-    navigator.sendBeacon?.("/api/mindbloom/word-game",
-      new Blob([JSON.stringify({level:this.level,accuracy:acc,medianMs:median(R.map(x=>x.responseMs).filter(Boolean)),
-        rounds:R,attempts:this.log})],{type:"application/json"}));
+    const acc = this._flush();
+    const R = this.rounds, n = R.length || 1;
     const next=acc>=0.8?Math.min(7,this.level+1):acc<0.5?Math.max(1,this.level-1):this.level;
     this.s._showFloatingText(this.s.player.x,this.s.player.y-90,`Level done! ${Math.round(acc*100)}% first try`,"#a3f78c");
     this.s.time.delayedCall(3000,()=>this.start(next));  // engine can override `next`
-    
   }
 }
