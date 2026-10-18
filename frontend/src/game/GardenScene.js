@@ -17,6 +17,8 @@ const LEVEL_CONFIGS = {
   5: { cols: 4, rows: 4, cardW: 110, cardH: 125, gap: 14, radius: 12, previewSec: 5 }, // 16 cards (8 pairs)
 };
 
+const GRIDS_PER_LEVEL = 3;
+
 // ── Animation Tuning ─────────────────────────────────────────
 const FLIP_DURATION = 160; // snappy, responsive card flip
 
@@ -40,13 +42,23 @@ export default class GardenScene extends Phaser.Scene {
   init(data) {
     const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const urlScore = params ? parseInt(params.get("score") || "0", 10) : 0;
-    const urlLevel = params ? parseInt(params.get("level") || "1", 10) : 1;
 
+    // Only designing Level 1 for all games (3 grids total in level 1)
+    this._level = 1;
+    this._currentGrid = 1;
+    this._totalGrids = GRIDS_PER_LEVEL;
+
+    // Cumulative stats for the entire Level 1 (across all 3 grids)
+    this._score = data?.score ?? urlScore ?? 0;
+    this._totalClicks = 0;
+    this._totalHits = 0;
+    this._totalMisses = 0;
+    this._gameStartTime = 0;
+
+    // Active round state
     this._clicks = 0;
     this._hits = 0;
     this._misses = 0;
-    this._score = data?.score ?? urlScore ?? 0;
-    this._level = data?.level ?? urlLevel ?? 1;
     this._matchedPairs = 0;
     this._flippedCards = []; // active open cards
     this._cards = [];
@@ -56,6 +68,7 @@ export default class GardenScene extends Phaser.Scene {
     this._mismatchTimer = null;
     this._previewTimer = null;
     this._previewCountdownEvent = null;
+    this._gridTransitionTimer = null;
   }
 
   // ── preload ─────────────────────────────────────────────────
@@ -104,15 +117,19 @@ export default class GardenScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: "19px", fontStyle: "bold", color: COL_GOLD,
     }).setDepth(52);
 
-    this._scoreText = this.add.text(W / 2 - 140, 80, `⭐ ${this._score}`, {
+    this._gridText = this.add.text(W / 2 - 180, 80, `Grid: ${this._currentGrid} / ${this._totalGrids}`, {
+      fontFamily: FONT, fontSize: "19px", fontStyle: "bold", color: "#6fe3ea",
+    }).setDepth(52);
+
+    this._scoreText = this.add.text(W / 2 - 40, 80, `⭐ ${this._score}`, {
       fontFamily: FONT, fontSize: "19px", fontStyle: "bold", color: COL_WHITE,
     }).setDepth(52);
 
-    this._pairsText = this.add.text(W / 2 + 60, 80, `Pairs: 0 / 2`, {
+    this._pairsText = this.add.text(W / 2 + 90, 80, `Pairs: 0 / 2`, {
       fontFamily: FONT, fontSize: "19px", fontStyle: "bold", color: COL_GREEN,
     }).setDepth(52);
 
-    this._timerText = this.add.text(W / 2 + 230, 80, "⏱ 0:00", {
+    this._timerText = this.add.text(W / 2 + 240, 80, "⏱ 0:00", {
       fontFamily: FONT, fontSize: "19px", fontStyle: "bold", color: COL_WHITE,
     }).setDepth(52);
 
@@ -138,6 +155,10 @@ export default class GardenScene extends Phaser.Scene {
       this._previewCountdownEvent.remove();
       this._previewCountdownEvent = null;
     }
+    if (this._gridTransitionTimer) {
+      this._gridTransitionTimer.remove();
+      this._gridTransitionTimer = null;
+    }
 
     this._cards.forEach(c => c.container?.destroy());
     this._cards = [];
@@ -146,8 +167,8 @@ export default class GardenScene extends Phaser.Scene {
     this._isPreviewing = true;
     this._roundStartTime = 0;
 
-    // Pick level configuration (Level 1 defaults to 2x2 = 2 pairs)
-    const cfg = LEVEL_CONFIGS[this._level] || LEVEL_CONFIGS[5];
+    // Pick level configuration (Level 1 is 2x2 = 2 pairs)
+    const cfg = LEVEL_CONFIGS[1];
     const { cols, rows, cardW, cardH, gap, radius, previewSec } = cfg;
     const totalPairs = (cols * rows) / 2;
     this._totalPairs = totalPairs;
@@ -280,6 +301,9 @@ export default class GardenScene extends Phaser.Scene {
     const finishDelay = this._cards.length * 35 + FLIP_DURATION + 40;
     this.time.delayedCall(finishDelay, () => {
       this._roundStartTime = this.time.now;
+      if (!this._gameStartTime) {
+        this._gameStartTime = this.time.now;
+      }
     });
   }
 
@@ -376,6 +400,7 @@ export default class GardenScene extends Phaser.Scene {
 
     // Now flip the clicked card immediately
     this._clicks++;
+    this._totalClicks++;
     this._showFace(card, true);
     this._flippedCards.push(card);
 
@@ -385,6 +410,7 @@ export default class GardenScene extends Phaser.Scene {
       if (a.fruitIdx === b.fruitIdx) {
         // ✅ Match!
         this._hits++;
+        this._totalHits++;
         this._matchedPairs++;
         this._score += 100 + Math.max(0, 50 - this._clicks * 2);
 
@@ -412,14 +438,15 @@ export default class GardenScene extends Phaser.Scene {
 
         this._updateHUD();
 
-        // Check if level cleared
+        // Check if grid cleared
         if (this._matchedPairs >= this._totalPairs) {
-          this.time.delayedCall(450, () => this._onRoundWin());
+          this.time.delayedCall(450, () => this._onGridCleared());
         }
       } else {
         // ❌ Mismatch: Every card can flip even if not right!
         // Stays open briefly or closes immediately when another card is clicked.
         this._misses++;
+        this._totalMisses++;
         this._showFloatingText(
           (a.container.x + b.container.x) / 2,
           Math.min(a.container.y, b.container.y) - 50,
@@ -517,6 +544,9 @@ export default class GardenScene extends Phaser.Scene {
   // ── HUD update ─────────────────────────────────────────────
   _updateHUD() {
     this._levelText.setText(`Level ${this._level}`);
+    if (this._gridText) {
+      this._gridText.setText(`Grid: ${this._currentGrid} / ${this._totalGrids}`);
+    }
     this._scoreText.setText(`⭐ ${this._score}`);
     this._pairsText.setText(`Pairs: ${this._matchedPairs} / ${this._totalPairs}`);
   }
@@ -524,113 +554,280 @@ export default class GardenScene extends Phaser.Scene {
   // ── Timer (update loop) ────────────────────────────────────
   update() {
     if (this._gameOver) return;
-    if (this._roundStartTime > 0 && !this._isPreviewing) {
-      const elapsed = Math.floor((this.time.now - this._roundStartTime) / 1000);
+    if (this._gameStartTime > 0 && !this._isPreviewing) {
+      const elapsed = Math.floor((this.time.now - this._gameStartTime) / 1000);
       const min = Math.floor(elapsed / 60);
       const sec = elapsed % 60;
       this._timerText.setText(`⏱ ${min}:${sec.toString().padStart(2, "0")}`);
     }
   }
 
-  // ── Round win ──────────────────────────────────────────────
-  _onRoundWin() {
+  // ── Grid cleared ───────────────────────────────────────────
+  _onGridCleared() {
     const elapsed = this._roundStartTime > 0
       ? Math.floor((this.time.now - this._roundStartTime) / 1000)
       : 1;
-    const timeBonus = Math.max(0, 200 - elapsed * 4);
+    const timeBonus = Math.max(0, 150 - elapsed * 4);
     this._score += timeBonus;
     this._updateHUD();
 
+    if (this._currentGrid < this._totalGrids) {
+      // Grid 1 or Grid 2 cleared: mini celebration before next grid
+      this._showGridWinPopup(timeBonus);
+    } else {
+      // All 3 grids cleared: complete Level 1
+      this._onLevelWin();
+    }
+  }
+
+  // ── Intermediate Grid Win Popup (Grid 1 & 2 of 3) ───────────
+  _showGridWinPopup(timeBonus) {
     const W = this.scale.width;
     const H = this.scale.height;
+
+    // Small celebratory confetti burst
+    for (let i = 0; i < 24; i++) {
+      const p = this.add.rectangle(
+        Phaser.Math.Between(W / 2 - 200, W / 2 + 200),
+        -10, 8, 12,
+        Phaser.Math.RND.pick([0xffd700, 0x7ddf64, 0x6fe3ea, 0xffa07a])
+      ).setDepth(190);
+      this.tweens.add({
+        targets: p,
+        y: H + 20,
+        angle: 360,
+        duration: Phaser.Math.Between(1000, 1800),
+        onComplete: () => p.destroy(),
+      });
+    }
+
+    const popup = this.add.container(W / 2, H / 2).setDepth(200).setScale(0.5);
+
+    const overlay = this.add.graphics();
+    overlay.fillStyle(0x091c06, 0.94);
+    overlay.fillRoundedRect(-200, -110, 400, 220, 20);
+    overlay.lineStyle(3, 0x55cc3b, 1);
+    overlay.strokeRoundedRect(-200, -110, 400, 220, 20);
+    popup.add(overlay);
+
+    const title = this.add.text(0, -65, `🌟 Grid ${this._currentGrid} Cleared! 🌟`, {
+      fontFamily: FONT, fontSize: "24px", fontStyle: "bold",
+      color: COL_GOLD, stroke: "#071504", strokeThickness: 4,
+    }).setOrigin(0.5);
+    popup.add(title);
+
+    const bonusText = this.add.text(0, -20, `Speed Bonus: +${timeBonus} ⭐`, {
+      fontFamily: FONT, fontSize: "18px", fontStyle: "bold", color: COL_WHITE,
+    }).setOrigin(0.5);
+    popup.add(bonusText);
+
+    const nextGridNum = this._currentGrid + 1;
+    let autoSec = 2;
+    const countdownText = this.add.text(0, 18, `Next Grid (${nextGridNum}/${this._totalGrids}) in ${autoSec}s...`, {
+      fontFamily: FONT, fontSize: "15px", color: "#a5e89a",
+    }).setOrigin(0.5);
+    popup.add(countdownText);
+
+    // "Next Grid ➔" button
+    const btnGfx = this.add.graphics();
+    btnGfx.fillStyle(0x2d6a1e, 1);
+    btnGfx.fillRoundedRect(-85, 45, 170, 38, 10);
+    btnGfx.lineStyle(1.5, 0x7ddf64, 1);
+    btnGfx.strokeRoundedRect(-85, 45, 170, 38, 10);
+    popup.add(btnGfx);
+
+    const btnText = this.add.text(0, 64, "Next Grid ➔", {
+      fontFamily: FONT, fontSize: "16px", fontStyle: "bold", color: COL_WHITE,
+    }).setOrigin(0.5);
+    popup.add(btnText);
+
+    const hit = this.add.rectangle(0, 64, 170, 38, 0x000000, 0)
+      .setInteractive({ useHandCursor: true });
+    popup.add(hit);
+
+    let hasAdvanced = false;
+    const advance = () => {
+      if (hasAdvanced) return;
+      hasAdvanced = true;
+      if (timerEvent) timerEvent.remove();
+      this.tweens.add({
+        targets: popup,
+        scale: 0,
+        alpha: 0,
+        duration: 200,
+        onComplete: () => {
+          popup.destroy();
+          this._clicks = 0;
+          this._hits = 0;
+          this._misses = 0;
+          this._currentGrid++;
+          this._buildRound();
+        }
+      });
+    };
+
+    hit.on("pointerover", () => btnText.setColor(COL_GOLD));
+    hit.on("pointerout", () => btnText.setColor(COL_WHITE));
+    hit.on("pointerdown", advance);
+
+    const timerEvent = this.time.addEvent({
+      delay: 1000,
+      repeat: 1,
+      callback: () => {
+        autoSec--;
+        if (countdownText && countdownText.active) {
+          countdownText.setText(`Next Grid (${nextGridNum}/${this._totalGrids}) in ${autoSec}s...`);
+        }
+        if (autoSec <= 0) {
+          advance();
+        }
+      }
+    });
+
+    this.tweens.add({
+      targets: popup,
+      scale: 1,
+      duration: 250,
+      ease: "Back.easeOut",
+    });
+  }
+
+  // ── Level 1 Grand Completion Modal ─────────────────────────
+  _onLevelWin() {
+    this._gameOver = true;
+    const totalSec = this._gameStartTime > 0
+      ? Math.floor((this.time.now - this._gameStartTime) / 1000)
+      : 1;
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    const timeFormatted = `${min}:${sec.toString().padStart(2, "0")}`;
+
+    const totalClicks = this._totalClicks;
+    const totalHits = this._totalHits;
+    const totalMisses = this._totalMisses;
+    const accuracyPct = totalClicks > 0
+      ? Math.round((totalHits / totalClicks) * 100)
+      : 0;
+
+    // Save to Supabase garden table (once for the full 3-grid level session)
+    this._saveStats();
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+
+    // Grand confetti burst
+    for (let i = 0; i < 45; i++) {
+      const p = this.add.rectangle(
+        Phaser.Math.Between(0, W),
+        -10, 8, 14,
+        Phaser.Math.RND.pick([0xffd700, 0x7ddf64, 0x6fe3ea, 0xff6b6b, 0xffa07a])
+      ).setDepth(190);
+      this.tweens.add({
+        targets: p,
+        y: H + 30,
+        angle: 360,
+        duration: Phaser.Math.Between(1200, 2400),
+        onComplete: () => p.destroy(),
+      });
+    }
 
     // Victory popup container
     const popup = this.add.container(W / 2, H / 2).setDepth(200).setScale(0.5);
 
     const overlay = this.add.graphics();
-    overlay.fillStyle(0x091c06, 0.94);
-    overlay.fillRoundedRect(-240, -170, 480, 340, 24);
+    overlay.fillStyle(0x091c06, 0.95);
+    overlay.fillRoundedRect(-240, -180, 480, 360, 24);
     overlay.lineStyle(3, 0x55cc3b, 1);
-    overlay.strokeRoundedRect(-240, -170, 480, 340, 24);
+    overlay.strokeRoundedRect(-240, -180, 480, 360, 24);
     popup.add(overlay);
 
-    const totalClicks = this._clicks;
-    const accuracyPct = totalClicks > 0
-      ? Math.round((this._hits / totalClicks) * 100)
-      : 0;
-
-    const title = this.add.text(0, -130, `🎉 Level ${this._level} Complete! 🎉`, {
+    const title = this.add.text(0, -140, "🎉 Level 1 Complete! 🎉", {
       fontFamily: FONT, fontSize: "27px", fontStyle: "bold",
       color: COL_GOLD, stroke: "#071504", strokeThickness: 4,
     }).setOrigin(0.5);
     popup.add(title);
 
+    const sub = this.add.text(0, -108, "🌟 All 3 Grids Cleared! 🌟", {
+      fontFamily: FONT, fontSize: "16px", fontStyle: "bold", color: "#a5e89a",
+    }).setOrigin(0.5);
+    popup.add(sub);
+
     const lines = [
-      `Score: ${this._score}  (Speed bonus: +${timeBonus})`,
-      `Clicks: ${totalClicks}`,
-      `Matches: ${this._hits}   Misses: ${this._misses}`,
+      `Score: ⭐ ${this._score}`,
+      `Total Clicks: ${totalClicks}`,
+      `Matches: ${totalHits}   Misses: ${totalMisses}`,
       `Accuracy: ${accuracyPct}%`,
-      `Time: ${elapsed}s`,
+      `Total Time: ${timeFormatted}`,
     ];
     lines.forEach((line, i) => {
-      const stat = this.add.text(0, -75 + i * 30, line, {
-        fontFamily: FONT, fontSize: "18px", color: COL_WHITE,
+      const stat = this.add.text(0, -68 + i * 28, line, {
+        fontFamily: FONT, fontSize: "17px", color: COL_WHITE,
       }).setOrigin(0.5);
       popup.add(stat);
     });
 
-    // Save to Supabase garden table
-    this._saveStats();
+    // Primary: Play Again Button
+    const playAgainGfx = this.add.graphics();
+    playAgainGfx.fillStyle(0x2d6a1e, 1);
+    playAgainGfx.fillRoundedRect(-110, 80, 220, 42, 12);
+    playAgainGfx.lineStyle(2, 0x7ddf64, 1);
+    playAgainGfx.strokeRoundedRect(-110, 80, 220, 42, 12);
+    popup.add(playAgainGfx);
 
-    // Next Level Button
-    const nextBtnGfx = this.add.graphics();
-    nextBtnGfx.fillStyle(0x2d6a1e, 1);
-    nextBtnGfx.fillRoundedRect(-110, 85, 220, 44, 12);
-    nextBtnGfx.lineStyle(2, 0x7ddf64, 1);
-    nextBtnGfx.strokeRoundedRect(-110, 85, 220, 44, 12);
-    popup.add(nextBtnGfx);
-
-    const hasNextLevel = this._level < 5;
-    const nextBtnText = this.add.text(0, 107, hasNextLevel ? "Next Level ➔" : "🔄 Play Again", {
-      fontFamily: FONT, fontSize: "19px", fontStyle: "bold",
+    const playAgainText = this.add.text(0, 101, "🔄 Play Again", {
+      fontFamily: FONT, fontSize: "18px", fontStyle: "bold",
       color: COL_WHITE, stroke: "#071504", strokeThickness: 3,
     }).setOrigin(0.5);
-    popup.add(nextBtnText);
+    popup.add(playAgainText);
 
-    const nextHit = this.add.rectangle(0, 107, 220, 44, 0x000000, 0)
+    const playAgainHit = this.add.rectangle(0, 101, 220, 42, 0x000000, 0)
       .setInteractive({ useHandCursor: true });
-    popup.add(nextHit);
+    popup.add(playAgainHit);
 
-    nextHit.on("pointerover", () => {
-      nextBtnText.setColor(COL_GOLD);
-      nextBtnGfx.clear();
-      nextBtnGfx.fillStyle(0x3a8226, 1);
-      nextBtnGfx.fillRoundedRect(-110, 85, 220, 44, 12);
-      nextBtnGfx.lineStyle(2, 0xffd700, 1);
-      nextBtnGfx.strokeRoundedRect(-110, 85, 220, 44, 12);
+    playAgainHit.on("pointerover", () => {
+      playAgainText.setColor(COL_GOLD);
+      playAgainGfx.clear();
+      playAgainGfx.fillStyle(0x3a8226, 1);
+      playAgainGfx.fillRoundedRect(-110, 80, 220, 42, 12);
+      playAgainGfx.lineStyle(2, 0xffd700, 1);
+      playAgainGfx.strokeRoundedRect(-110, 80, 220, 42, 12);
     });
-    nextHit.on("pointerout", () => {
-      nextBtnText.setColor(COL_WHITE);
-      nextBtnGfx.clear();
-      nextBtnGfx.fillStyle(0x2d6a1e, 1);
-      nextBtnGfx.fillRoundedRect(-110, 85, 220, 44, 12);
-      nextBtnGfx.lineStyle(2, 0x7ddf64, 1);
-      nextBtnGfx.strokeRoundedRect(-110, 85, 220, 44, 12);
+    playAgainHit.on("pointerout", () => {
+      playAgainText.setColor(COL_WHITE);
+      playAgainGfx.clear();
+      playAgainGfx.fillStyle(0x2d6a1e, 1);
+      playAgainGfx.fillRoundedRect(-110, 80, 220, 42, 12);
+      playAgainGfx.lineStyle(2, 0x7ddf64, 1);
+      playAgainGfx.strokeRoundedRect(-110, 80, 220, 42, 12);
     });
-    nextHit.on("pointerdown", () => {
+    playAgainHit.on("pointerdown", () => {
       popup.destroy();
+      this._gameOver = false;
+      this._currentGrid = 1;
       this._clicks = 0;
       this._hits = 0;
       this._misses = 0;
-      if (hasNextLevel) {
-        this._level++;
-      }
+      this._totalClicks = 0;
+      this._totalHits = 0;
+      this._totalMisses = 0;
+      this._gameStartTime = 0;
       this._buildRound();
     });
 
-    // Lobby link
-    const lobbyText = this.add.text(0, 146, "← Back to Lobby", {
-      fontFamily: FONT, fontSize: "14px", color: "#c9b87a",
+    // Secondary navigation: Map & Lobby
+    const mapText = this.add.text(-70, 145, "🗺️ Map", {
+      fontFamily: FONT, fontSize: "15px", color: "#c9b87a",
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    popup.add(mapText);
+
+    mapText.on("pointerover", () => mapText.setColor(COL_GOLD));
+    mapText.on("pointerout", () => mapText.setColor("#c9b87a"));
+    mapText.on("pointerdown", () => {
+      window.location.href = "/map";
+    });
+
+    const lobbyText = this.add.text(70, 145, "🏰 Lobby", {
+      fontFamily: FONT, fontSize: "15px", color: "#c9b87a",
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     popup.add(lobbyText);
 
@@ -651,9 +848,9 @@ export default class GardenScene extends Phaser.Scene {
 
   // ── Save stats to Supabase 'garden' table ────────────────────
   _saveStats() {
-    const totalAttempts = this._clicks;
-    const totalCorrect = this._hits;
-    const totalWrong = this._misses;
+    const totalAttempts = this._totalClicks;
+    const totalCorrect = this._totalHits;
+    const totalWrong = this._totalMisses;
     const accuracyPct = totalAttempts > 0
       ? Math.round((totalCorrect / totalAttempts) * 100)
       : 0;

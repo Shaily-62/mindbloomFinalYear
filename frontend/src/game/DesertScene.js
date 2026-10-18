@@ -1092,7 +1092,7 @@ export default class DesertScene extends Phaser.Scene {
     }).setOrigin(0.5);
     popupContainer.add(scoreText);
 
-    const nextText = this.add.text(0, 45, `Next: Level ${nextLevel}`, {
+    const nextText = this.add.text(0, 45, "Next: Garden Memory", {
       fontFamily: FONT, fontSize: "18px", fontStyle: "bold", color: "#f2cf85",
     }).setOrigin(0.5);
     popupContainer.add(nextText);
