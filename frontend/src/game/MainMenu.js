@@ -80,7 +80,12 @@ export default class MainMenu extends Phaser.Scene {
         const itemUpper = item.toUpperCase();
 
         if (itemUpper === "PLAY") {
-          console.log("PLAY clicked");
+          const navigate = this.registry.get("navigate");
+          if (typeof navigate === "function") {
+            navigate("/lobby");
+          } else {
+            window.location.href = "/lobby";
+          }
         }
 
         if (itemUpper === "LOBBY") {
@@ -93,7 +98,12 @@ export default class MainMenu extends Phaser.Scene {
         }
 
         if (itemUpper === "QUIT") {
-          console.log("QUIT clicked");
+          const navigate = this.registry.get("navigate");
+          if (typeof navigate === "function") {
+            navigate("/dashboard");
+          } else {
+            window.location.href = "/dashboard";
+          }
         }
       });
     });

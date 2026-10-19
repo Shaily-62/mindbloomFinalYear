@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { GardenAdaptive } from "./gardenAdaptive";
 
 const FONT = "'Quicksand', system-ui, -apple-system, sans-serif";
 
@@ -42,13 +43,20 @@ export default class GardenScene extends Phaser.Scene {
   init(data) {
     const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const urlScore = params ? parseInt(params.get("score") || "0", 10) : 0;
+    const urlLevel = params ? parseInt(params.get("level") || "0", 10) : 0;
 
-    // Only designing Level 1 for all games (3 grids total in level 1)
-    this._level = 1;
+    const childId = localStorage.getItem("childId");
+    this.adaptive = new GardenAdaptive(childId, "adaptive", 5);
+
+    if (urlLevel && urlLevel >= 1 && urlLevel <= 5) {
+      this.adaptive.setLevel(urlLevel);
+    }
+
+    this._level = this.adaptive.level;
     this._currentGrid = 1;
     this._totalGrids = GRIDS_PER_LEVEL;
 
-    // Cumulative stats for the entire Level 1 (across all 3 grids)
+    // Cumulative stats for the entire Level (across all 3 grids)
     this._score = data?.score ?? urlScore ?? 0;
     this._totalClicks = 0;
     this._totalHits = 0;
@@ -69,6 +77,7 @@ export default class GardenScene extends Phaser.Scene {
     this._previewTimer = null;
     this._previewCountdownEvent = null;
     this._gridTransitionTimer = null;
+    this._hasNavigatedMap = false;
   }
 
   // ── preload ─────────────────────────────────────────────────
@@ -167,8 +176,8 @@ export default class GardenScene extends Phaser.Scene {
     this._isPreviewing = true;
     this._roundStartTime = 0;
 
-    // Pick level configuration (Level 1 is 2x2 = 2 pairs)
-    const cfg = LEVEL_CONFIGS[1];
+    // Pick level configuration based on current adaptive level
+    const cfg = LEVEL_CONFIGS[this._level] || LEVEL_CONFIGS[1];
     const { cols, rows, cardW, cardH, gap, radius, previewSec } = cfg;
     const totalPairs = (cols * rows) / 2;
     this._totalPairs = totalPairs;
@@ -571,11 +580,22 @@ export default class GardenScene extends Phaser.Scene {
     this._score += timeBonus;
     this._updateHUD();
 
+    if (this.adaptive) {
+      this.adaptive.record({
+        level: this._level,
+        pairs: this._totalPairs,
+        hits: this._hits,
+        misses: this._misses,
+        clicks: this._clicks,
+        timeMs: this._roundStartTime > 0 ? Date.now() - this._roundStartTime : null,
+      });
+    }
+
     if (this._currentGrid < this._totalGrids) {
       // Grid 1 or Grid 2 cleared: mini celebration before next grid
       this._showGridWinPopup(timeBonus);
     } else {
-      // All 3 grids cleared: complete Level 1
+      // All 3 grids cleared: complete current Level
       this._onLevelWin();
     }
   }
@@ -709,6 +729,19 @@ export default class GardenScene extends Phaser.Scene {
       ? Math.round((totalHits / totalClicks) * 100)
       : 0;
 
+    // Mark level complete so child gets next level on next session/login
+    this.adaptive?.markCompleted();
+
+    // Also update overall completed level progress for the World Map
+    const childId = localStorage.getItem("childId") || "guest";
+    const compStr = localStorage.getItem(`mb_wordperf_completed_${childId}`);
+    const completed = compStr ? parseInt(compStr, 10) : 0;
+    if (this._level > completed) {
+      try {
+        localStorage.setItem(`mb_wordperf_completed_${childId}`, this._level.toString());
+      } catch {}
+    }
+
     // Save to Supabase garden table (once for the full 3-grid level session)
     this._saveStats();
 
@@ -741,7 +774,7 @@ export default class GardenScene extends Phaser.Scene {
     overlay.strokeRoundedRect(-240, -180, 480, 360, 24);
     popup.add(overlay);
 
-    const title = this.add.text(0, -140, "🎉 Level 1 Complete! 🎉", {
+    const title = this.add.text(0, -140, `🎉 Level ${this._level} Complete! 🎉`, {
       fontFamily: FONT, fontSize: "27px", fontStyle: "bold",
       color: COL_GOLD, stroke: "#071504", strokeThickness: 4,
     }).setOrigin(0.5);
@@ -766,67 +799,74 @@ export default class GardenScene extends Phaser.Scene {
       popup.add(stat);
     });
 
-    // Primary: Play Again Button
-    const playAgainGfx = this.add.graphics();
-    playAgainGfx.fillStyle(0x2d6a1e, 1);
-    playAgainGfx.fillRoundedRect(-110, 80, 220, 42, 12);
-    playAgainGfx.lineStyle(2, 0x7ddf64, 1);
-    playAgainGfx.strokeRoundedRect(-110, 80, 220, 42, 12);
-    popup.add(playAgainGfx);
+    // Auto transition to Map
+    let autoSec = 3;
+    const autoText = this.add.text(0, 68, `🗺️ Returning to Map in ${autoSec}s...`, {
+      fontFamily: FONT, fontSize: "16px", fontStyle: "bold", color: "#a5e89a",
+    }).setOrigin(0.5);
+    popup.add(autoText);
 
-    const playAgainText = this.add.text(0, 101, "🔄 Play Again", {
+    const goToMap = () => {
+      if (this._hasNavigatedMap) return;
+      this._hasNavigatedMap = true;
+      if (countdownTimer) countdownTimer.remove();
+      this.cameras.main.fadeOut(400);
+      this.time.delayedCall(450, () => {
+        window.location.href = "/map";
+      });
+    };
+
+    const countdownTimer = this.time.addEvent({
+      delay: 1000,
+      repeat: autoSec - 1,
+      callback: () => {
+        autoSec--;
+        if (autoSec <= 0) {
+          goToMap();
+        } else if (autoText && autoText.active) {
+          autoText.setText(`🗺️ Returning to Map in ${autoSec}s...`);
+        }
+      }
+    });
+
+    // Primary: Return to Map Button
+    const mapBtnGfx = this.add.graphics();
+    mapBtnGfx.fillStyle(0x2d6a1e, 1);
+    mapBtnGfx.fillRoundedRect(-120, 94, 240, 42, 12);
+    mapBtnGfx.lineStyle(2, 0x7ddf64, 1);
+    mapBtnGfx.strokeRoundedRect(-120, 94, 240, 42, 12);
+    popup.add(mapBtnGfx);
+
+    const mapBtnText = this.add.text(0, 115, "🗺️ Back to Map 🗺️", {
       fontFamily: FONT, fontSize: "18px", fontStyle: "bold",
       color: COL_WHITE, stroke: "#071504", strokeThickness: 3,
     }).setOrigin(0.5);
-    popup.add(playAgainText);
+    popup.add(mapBtnText);
 
-    const playAgainHit = this.add.rectangle(0, 101, 220, 42, 0x000000, 0)
+    const mapBtnHit = this.add.rectangle(0, 115, 240, 42, 0x000000, 0)
       .setInteractive({ useHandCursor: true });
-    popup.add(playAgainHit);
+    popup.add(mapBtnHit);
 
-    playAgainHit.on("pointerover", () => {
-      playAgainText.setColor(COL_GOLD);
-      playAgainGfx.clear();
-      playAgainGfx.fillStyle(0x3a8226, 1);
-      playAgainGfx.fillRoundedRect(-110, 80, 220, 42, 12);
-      playAgainGfx.lineStyle(2, 0xffd700, 1);
-      playAgainGfx.strokeRoundedRect(-110, 80, 220, 42, 12);
+    mapBtnHit.on("pointerover", () => {
+      mapBtnText.setColor(COL_GOLD);
+      mapBtnGfx.clear();
+      mapBtnGfx.fillStyle(0x3a8226, 1);
+      mapBtnGfx.fillRoundedRect(-120, 94, 240, 42, 12);
+      mapBtnGfx.lineStyle(2, 0xffd700, 1);
+      mapBtnGfx.strokeRoundedRect(-120, 94, 240, 42, 12);
     });
-    playAgainHit.on("pointerout", () => {
-      playAgainText.setColor(COL_WHITE);
-      playAgainGfx.clear();
-      playAgainGfx.fillStyle(0x2d6a1e, 1);
-      playAgainGfx.fillRoundedRect(-110, 80, 220, 42, 12);
-      playAgainGfx.lineStyle(2, 0x7ddf64, 1);
-      playAgainGfx.strokeRoundedRect(-110, 80, 220, 42, 12);
+    mapBtnHit.on("pointerout", () => {
+      mapBtnText.setColor(COL_WHITE);
+      mapBtnGfx.clear();
+      mapBtnGfx.fillStyle(0x2d6a1e, 1);
+      mapBtnGfx.fillRoundedRect(-120, 94, 240, 42, 12);
+      mapBtnGfx.lineStyle(2, 0x7ddf64, 1);
+      mapBtnGfx.strokeRoundedRect(-120, 94, 240, 42, 12);
     });
-    playAgainHit.on("pointerdown", () => {
-      popup.destroy();
-      this._gameOver = false;
-      this._currentGrid = 1;
-      this._clicks = 0;
-      this._hits = 0;
-      this._misses = 0;
-      this._totalClicks = 0;
-      this._totalHits = 0;
-      this._totalMisses = 0;
-      this._gameStartTime = 0;
-      this._buildRound();
-    });
+    mapBtnHit.on("pointerdown", () => goToMap());
 
-    // Secondary navigation: Map & Lobby
-    const mapText = this.add.text(-70, 145, "🗺️ Map", {
-      fontFamily: FONT, fontSize: "15px", color: "#c9b87a",
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    popup.add(mapText);
-
-    mapText.on("pointerover", () => mapText.setColor(COL_GOLD));
-    mapText.on("pointerout", () => mapText.setColor("#c9b87a"));
-    mapText.on("pointerdown", () => {
-      window.location.href = "/map";
-    });
-
-    const lobbyText = this.add.text(70, 145, "🏰 Lobby", {
+    // Secondary navigation: Lobby
+    const lobbyText = this.add.text(0, 154, "🏰 Lobby", {
       fontFamily: FONT, fontSize: "15px", color: "#c9b87a",
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     popup.add(lobbyText);
@@ -834,6 +874,7 @@ export default class GardenScene extends Phaser.Scene {
     lobbyText.on("pointerover", () => lobbyText.setColor(COL_GOLD));
     lobbyText.on("pointerout", () => lobbyText.setColor("#c9b87a"));
     lobbyText.on("pointerdown", () => {
+      if (countdownTimer) countdownTimer.remove();
       window.location.href = "/lobby";
     });
 

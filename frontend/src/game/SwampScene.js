@@ -67,6 +67,8 @@ export default class SwampScene extends Phaser.Scene {
   }
 
   init() {
+    const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    this._requestedLevel = params ? parseInt(params.get("level") || "0", 10) : 0;
     this._char = localStorage.getItem("selectedCharacter") || "boy";
     const childId = localStorage.getItem("childId");
     try {
@@ -315,7 +317,7 @@ export default class SwampScene extends Phaser.Scene {
 
     // 12. Start the Word Game — spawns letter-goblins for each round
     this.wordGame = new WordGame(this);
-    this.wordGame.start(1);
+    this.wordGame.start(this._requestedLevel || undefined);
   }
 
   _createAnimations() {

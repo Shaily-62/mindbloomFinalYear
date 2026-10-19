@@ -5,13 +5,22 @@
  * Each round:  show word → vulture smashes it → syllables scatter →
  * hero collects them in order → word reconstructed → celebrate.
  *
+ * Adaptive: a selector (random or adaptive) picks the level + word for every
+ * round from the child's own desert history (separate from the swamp history).
+ *
  * Tracking: word, syllable order, accuracy, attempts, response time.
  */
 import Phaser from "phaser";
+import { createSelector, PerformanceTracker } from "./wordAdaptive";
+
 const FONT = "'Quicksand', system-ui, -apple-system, sans-serif";
+const SELECTION_MODE = "adaptive";   // "random" | "adaptive"
+
+// Desert pacing differs from swamp: responseMs below is PER SYLLABLE
+// (walking to chips is slower than striking a goblin), so use a looser "fast".
+const DESERT_OPTS = { fastMs: 7000, minSamples: 2 };
 
 // ── Word bank with syllable breakdowns ────────────────────────
-// Grouped by difficulty tier so adaptive difficulty can promote/demote.
 export const SYLLABLE_LEVELS = {
   1: {
     tag: "2-syllable-easy",
@@ -67,6 +76,16 @@ export const SYLLABLE_LEVELS = {
   },
 };
 
+// The selector works on plain word strings, so build:
+//  - a { level: { words: [string] } } view for the selector
+//  - a word -> entry lookup to get the syllables back
+const SELECTOR_LEVELS = Object.fromEntries(
+  Object.entries(SYLLABLE_LEVELS).map(([lvl, cfg]) => [lvl, { words: cfg.words.map((w) => w.word) }])
+);
+const WORD_LOOKUP = Object.fromEntries(
+  Object.values(SYLLABLE_LEVELS).flatMap((cfg) => cfg.words.map((w) => [w.word, w]))
+);
+
 const WORDS_PER_DESERT_ROUND = 3;
 const median = (a) => {
   const s = [...a].sort((x, y) => x - y);
@@ -81,24 +100,31 @@ export class DesertSyllableGame {
     this.log = [];          // per-attempt log
     this.rounds = [];       // per-round summary
     this.currentIndex = 0;  // which syllable we're waiting for next
+
+    // Adaptive engine: own history namespace so desert and swamp don't mix
+    this.tracker = new PerformanceTracker(localStorage.getItem("childId"), "syllperf");
+    this.selector = createSelector(SELECTION_MODE, this.tracker, SELECTOR_LEVELS, 1, DESERT_OPTS);
+    this.level = this.selector.level;
+    this.cfg = SYLLABLE_LEVELS[this.level];
   }
 
-  start(level = 1) {
-    this.level = Math.min(Math.max(1, level), Object.keys(SYLLABLE_LEVELS).length);
-    this.cfg = SYLLABLE_LEVELS[this.level];
-    this.queue = Phaser.Utils.Array.Shuffle([...this.cfg.words]);
+  start(requestedLevel) {
     this.rounds = [];
     this.log = [];
     this.currentIndex = 0;
+    if (requestedLevel && SYLLABLE_LEVELS[requestedLevel]) {
+      this.selector.setLevel(requestedLevel);
+    }
+    this.level = this.selector.level;
+    this.cfg = SYLLABLE_LEVELS[this.level];
     this.nextRound();
   }
 
   nextRound() {
-    const entry = this.queue.pop();
-    if (!entry) {
-      this._levelDone();
-      return;
-    }
+    const pick = this.selector.next();
+    this.level = pick.level;
+    this.cfg = SYLLABLE_LEVELS[pick.level];
+    const entry = WORD_LOOKUP[pick.word];
 
     this.round = {
       word: entry.word,
@@ -106,6 +132,7 @@ export class DesertSyllableGame {
       collected: [],       // syllables collected so far
       attempts: 0,
       wrongAttempts: 0,
+      wrong: [],           // wrong syllables chosen (for error analysis)
       t0: 0,               // timer starts after vulture animation
       startTime: 0,
     };
@@ -162,6 +189,7 @@ export class DesertSyllableGame {
     } else {
       this.streak = 0;
       this.round.wrongAttempts++;
+      this.round.wrong.push(syllableText);
       return { correct: false, done: false };
     }
   }
@@ -179,6 +207,7 @@ export class DesertSyllableGame {
 
     this.rounds.push({
       word: r.word,
+      level: this.level,
       syllables: r.syllables,
       tag: this.cfg.tag,
       attempts: r.attempts,
@@ -187,6 +216,20 @@ export class DesertSyllableGame {
       responseMs: ms,
       pts,
       stars,
+    });
+
+    // Feed the adaptive engine (persisted per child in localStorage).
+    // attempts = wrong + 1 so "first try" means zero wrong syllables;
+    // responseMs is per syllable so 2- and 4-syllable words are comparable.
+    this.tracker.record({
+      word: r.word,
+      level: this.level,
+      tag: this.cfg.tag,
+      syllableCount: r.syllables.length,
+      attempts: r.wrongAttempts + 1,
+      responseMs: ms !== null ? Math.round(ms / r.syllables.length) : null,
+      wrong: r.wrong,
+      mode: this.selector.mode,
     });
 
     this.score += pts;
@@ -229,7 +272,7 @@ export class DesertSyllableGame {
     const totalAttempts = this.log.length;
     const totalCorrect  = this.log.filter((x) => x.correct).length;
     const totalWrong    = totalAttempts - totalCorrect;
-    const accuracyPct   = Math.round((R.filter((x) => x.firstTry).length / n) * 100);
+    const accuracyPct   = R.length ? Math.round((R.filter((x) => x.firstTry).length / n) * 100) : 0;
     const missratePct   = totalAttempts ? Math.round((totalWrong / totalAttempts) * 100) : 0;
 
     try {
@@ -245,17 +288,15 @@ export class DesertSyllableGame {
       console.error("saveDesert error:", e);
     }
 
-    // Adaptive difficulty
-    const next =
-      acc >= 0.8
-        ? Math.min(Object.keys(SYLLABLE_LEVELS).length, this.level + 1)
-        : acc < 0.4
-        ? Math.max(1, this.level - 1)
-        : this.level;
+    if (this.selector?.markCompleted) {
+      this.selector.markCompleted();
+    }
+
+    // The level the selector will use for the next word (shown on the end screen)
+    const next = this.selector.peekLevel();
 
     this.scene._showLevelComplete(acc, next);
   }
-
 
   getScore() {
     return this.score;

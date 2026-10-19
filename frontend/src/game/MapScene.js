@@ -181,7 +181,18 @@ export default class MapScene extends Phaser.Scene {
     this._drawTerrain();
     PROPS.forEach(([key, x, y, h]) => this._place(key, x, y, h));
     this._drawPath();
-    LEVELS.forEach((node) => this._createLevelNode(node));
+
+    const childId = localStorage.getItem("childId") || "guest";
+    const compStr = localStorage.getItem(`mb_wordperf_completed_${childId}`);
+    const completed = compStr ? parseInt(compStr, 10) : 0;
+    const currentMax = Math.max(1, Math.min(7, completed + 1));
+
+    LEVELS.forEach((node) => {
+      this._createLevelNode({
+        ...node,
+        unlocked: node.num <= currentMax,
+      });
+    });
 
     this.add.text(W / 2 + 2, 38, "World Map", {
       fontFamily: FONT, fontSize: "48px", color: "#1a2e10",
@@ -361,11 +372,7 @@ export default class MapScene extends Phaser.Scene {
         duration: 80,
         yoyo: true,
         onComplete: () => {
-          if (num === 1) {
-            window.location.href = "/swamp";
-          } else {
-            console.log(`Level ${num} selected: ${name}`);
-          }
+          window.location.href = `/swamp?level=${num}`;
         },
       });
     });

@@ -1111,7 +1111,7 @@ export default class DesertScene extends Phaser.Scene {
       if (countdownTimer) countdownTimer.remove();
       this.cameras.main.fadeOut(400);
       this.time.delayedCall(450, () => {
-        window.location.href = `/garden?score=${totalScore}&level=1`;
+        window.location.href = `/garden?score=${totalScore}`;
       });
     };
 
